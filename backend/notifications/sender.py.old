@@ -1,0 +1,81 @@
+from notifications.telegram import (
+    send_telegram_message
+)
+
+from notifications.sms import (
+    send_sms
+)
+
+from notifications.bale import (
+    send_bale_message
+)
+
+from notifications.rubika import (
+    send_rubika_message
+)
+
+
+async def notify_supplier(
+    supplier,
+    text
+):
+
+    try:
+
+        if getattr(
+            supplier,
+            "telegram_chat_id",
+            None
+        ):
+
+            send_telegram_message(
+                supplier.telegram_chat_id,
+                text
+            )
+
+    except Exception as e:
+        print("telegram error", e)
+
+    try:
+
+        if getattr(
+            supplier,
+            "bale_chat_id",
+            None
+        ):
+
+            send_bale_message(
+                supplier.bale_chat_id,
+                text
+            )
+
+    except Exception as e:
+        print("bale error", e)
+
+    try:
+
+        if getattr(
+            supplier,
+            "rubika_chat_id",
+            None
+        ):
+
+            send_rubika_message(
+                supplier.rubika_chat_id,
+                text
+            )
+
+    except Exception as e:
+        print("rubika error", e)
+
+    try:
+
+        if supplier.phone:
+
+            send_sms(
+                supplier.phone,
+                text
+            )
+
+    except Exception as e:
+        print("sms error", e)

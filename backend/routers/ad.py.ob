@@ -1,0 +1,49 @@
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from database import get_db
+from models import Ad
+
+router = APIRouter(prefix="/ads")
+
+
+# -----------------------------------------
+# 1. دریافت همه کانال‌ها
+# -----------------------------------------
+@router.get("/")
+def get_all_ads(db: Session = Depends(get_db)):
+
+    ads = db.query(Ad).all()
+
+    result = []
+
+    for ad in ads:
+        result.append({
+            "id": ad.id,
+            "name": ad.name,
+            "link": ad.link
+        })
+
+    return result
+
+
+# -----------------------------------------
+# 2. دریافت کانال‌ها بر اساس category
+# (آماده برای آینده)
+# -----------------------------------------
+@router.get("/by-category")
+def get_ads_by_category(category: str, db: Session = Depends(get_db)):
+
+    ads = db.query(Ad).all()
+
+    # فعلاً چون category تو Ad نداریم → fallback
+    result = []
+
+    for ad in ads:
+        result.append({
+            "id": ad.id,
+            "name": ad.name,
+            "link": ad.link
+        })
+
+    return result

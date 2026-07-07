@@ -1,0 +1,76 @@
+from sqlalchemy.orm import Session
+from models import Supplier
+
+
+def calculate_score(lead, supplier: Supplier, strategy: str = "default") -> int:
+    """
+    strategy-based scoring:
+
+    strategies:
+    - nearest → location priority
+    - cheapest → credit priority (فعلاً شبیه price)
+    - experienced → rating priority
+    """
+
+    if lead is None or supplier is None:
+        return 0
+
+    score = 0
+
+    # ---------------- BASE MATCH ----------------
+
+    # category
+    if supplier.category and lead.category:
+        if supplier.category.lower() == lead.category.lower():
+            score += 5
+
+    # ---------------- STRATEGY ----------------
+
+    # 1️⃣ NEAREST
+    if strategy == "nearest":
+        if supplier.location and lead.location:
+            if supplier.location.lower() == lead.location.lower():
+                score += 10  # 🔥 خیلی مهم
+
+        score += supplier.rating or 0
+
+    # 2️⃣ CHEAPEST
+    elif strategy == "cheapest":
+        # فعلاً price نداریم → از credit برعکس استفاده می‌کنیم
+        # credit کمتر → ارزون‌تر فرض می‌کنیم
+        score += max(0, 10 - (supplier.credit or 0))
+
+    # 3️⃣ EXPERIENCED
+    elif strategy == "experienced":
+        score += (supplier.rating or 0) * 3  # 🔥 وزن بالا
+
+    # DEFAULT
+    else:
+        if supplier.location and lead.location:
+            if supplier.location.lower() == lead.location.lower():
+                score += 3
+
+        score += supplier.rating or 0
+
+    return score
+
+
+def match_suppliers(db: Session, lead, strategy: str = "default", limit: int = 5):
+
+    if lead is None:
+        return []
+
+    suppliers = db.query(Supplier).filter(Supplier.category != None).all()
+
+    scored = []
+
+    for s in suppliers:
+        try:
+            score = calculate_score(lead, s, strategy)
+            scored.append((s, score))
+        except Exception:
+            continue
+
+    scored.sort(key=lambda x: x[1], reverse=True)
+
+    return scored[:limit]

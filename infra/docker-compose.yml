@@ -1,0 +1,112 @@
+version: '3.9'
+
+services:
+
+  postgres:
+    image: docker.abrha.net/postgres:15
+    container_name: lae_postgres
+    restart: always
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: docker.abrha.net/redis:7
+    container_name: lae_redis
+    restart: always
+
+    ports:
+      - "6379:6379"
+
+  lae_backend:
+    build:
+      context: ../backend
+    container_name: lae_backend
+
+    restart: always
+    working_dir: /app
+
+    volumes:
+      - ../backend:/app
+    env_file:
+      - .env
+
+    ports:
+      - '8000:8000'
+
+    depends_on:
+      - postgres
+      - redis
+
+  worker:
+    build:
+      context: ../backend
+    container_name: lae_worker
+
+    restart: always
+    working_dir: /app
+
+    volumes:
+      - ../backend:/app
+
+    command: >
+      sh -c "
+      python worker.py
+      "
+
+    env_file:
+      - .env
+
+    depends_on:
+      - postgres
+      - redis
+
+  bot_worker:
+    image: docker.abrha.net/python:3.10
+    container_name: lae_bot_worker
+
+    restart: always
+    working_dir: /app
+
+    volumes:
+      - ../backend:/app
+
+    command: >
+      sh -c "
+      pip install -r requirements.txt --default-timeout=300 &&
+      python bots_runner.py
+      "
+
+    env_file:
+      - .env
+
+    depends_on:
+      - postgres
+      - redis
+
+  nginx:
+    image: docker.abrha.net/nginx:latest
+    container_name: lae_nginx
+
+    restart: always
+
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+      - ./nginx/html:/usr/share/nginx/html
+
+    ports:
+      - "80:80"
+
+    depends_on:
+      - lae_backend
+
+volumes:
+  postgres_data:

@@ -1,0 +1,57 @@
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from database import get_db
+from models import User, Request
+
+router = APIRouter()
+
+
+@router.post("/request")
+def create_request(
+    phone: str,
+    type: str,
+    category: str,
+    title: str,
+    location: str,
+    db: Session = Depends(get_db)
+):
+
+    # ---------------------------------
+    # 1. validation ساده (فعلاً مینیمال)
+    # ---------------------------------
+    if not phone or not category:
+        return {"error": "invalid_input"}
+
+    # ---------------------------------
+    # 2. get or create user
+    # ---------------------------------
+    user = db.query(User).filter(User.phone == phone).first()
+
+    if not user:
+        user = User(phone=phone)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    # ---------------------------------
+    # 3. create request
+    # ---------------------------------
+    req = Request(
+        user_id=user.id,
+        type=type,
+        category=category,
+        title=title,
+        location=location
+    )
+
+    db.add(req)
+    db.commit()
+    db.refresh(req)
+
+    # ---------------------------------
+    # 4. response
+    # ---------------------------------
+    return {
+        "request_id": req.id
+    }

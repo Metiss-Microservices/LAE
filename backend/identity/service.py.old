@@ -1,0 +1,499 @@
+from uuid import uuid4
+from datetime import (
+    datetime,
+    timedelta
+)
+
+from sqlalchemy.orm import Session
+
+from models import (
+
+    Supplier,
+    Client,
+    UserIdentity
+)
+
+from config import (
+    SESSION_EXPIRE_DAYS
+)
+
+
+# =========================================================
+# MEMORY SESSION STORE
+# V7
+# later -> redis
+# =========================================================
+
+sessions = {}
+
+
+# =========================================================
+# CREATE SESSION
+# =========================================================
+
+def create_session(
+
+    identity_id,
+    role
+):
+
+    token = str(uuid4())
+
+    sessions[token] = {
+
+        "identity_id":
+            str(identity_id),
+
+        "role":
+            role,
+
+        "created_at":
+            datetime.utcnow(),
+
+        "expires_at":
+            datetime.utcnow()
+            + timedelta(
+                days=SESSION_EXPIRE_DAYS
+            )
+    }
+
+    return token
+
+
+# =========================================================
+# GET SESSION
+# =========================================================
+
+def get_session(
+    token
+):
+
+    if not token:
+        return None
+
+    session = sessions.get(token)
+
+    if not session:
+        return None
+
+    if (
+        session["expires_at"]
+        <
+        datetime.utcnow()
+    ):
+
+        sessions.pop(
+            token,
+            None
+        )
+
+        return None
+
+    return session
+
+
+# =========================================================
+# REMOVE SESSION
+# =========================================================
+
+def remove_session(
+    token
+):
+
+    sessions.pop(
+        token,
+        None
+    )
+
+
+# =========================================================
+# FIND IDENTITY
+# =========================================================
+
+def find_identity(
+
+    db: Session,
+
+    phone
+):
+
+    return db.query(
+        UserIdentity
+    ).filter_by(
+        phone=phone
+    ).first()
+
+
+# =========================================================
+# CREATE IDENTITY
+# =========================================================
+
+def create_identity(
+
+    db: Session,
+
+    phone
+):
+
+    identity = UserIdentity(
+
+        phone=phone
+    )
+
+    db.add(identity)
+
+    db.commit()
+
+    db.refresh(identity)
+
+    return identity
+
+
+# =========================================================
+# GET OR CREATE IDENTITY
+# =========================================================
+
+def get_or_create_identity(
+
+    db: Session,
+
+    phone
+):
+
+    identity = find_identity(
+
+        db,
+        phone
+    )
+
+    if identity:
+        return identity
+
+    return create_identity(
+
+        db,
+        phone
+    )
+
+
+# =========================================================
+# CREATE SUPPLIER
+# =========================================================
+
+def register_supplier(
+
+    db: Session,
+
+    phone,
+
+    full_name,
+
+    password,
+
+    category_id,
+
+    subcategory_id,
+
+    location_id
+):
+
+    identity = get_or_create_identity(
+
+        db,
+        phone
+    )
+
+    existing = db.query(
+        Supplier
+    ).filter_by(
+        phone=phone
+    ).first()
+
+    if existing:
+
+        return {
+
+            "success": False,
+
+            "error":
+                "supplier_exists"
+        }
+
+    supplier = Supplier(
+
+        identity_id=
+            identity.id,
+
+        phone=phone,
+
+        full_name=full_name,
+
+        password=password,
+
+        category_id=
+            category_id,
+
+        subcategory_id=
+            subcategory_id,
+
+        location_id=
+            location_id
+    )
+
+    db.add(supplier)
+
+    db.commit()
+
+    db.refresh(supplier)
+
+    return {
+
+        "success": True,
+
+        "supplier":
+            supplier
+    }
+
+
+# =========================================================
+# CREATE CLIENT
+# =========================================================
+
+def register_client(
+
+    db: Session,
+
+    phone,
+
+    full_name=None
+):
+
+    identity = get_or_create_identity(
+
+        db,
+        phone
+    )
+
+    client = db.query(
+        Client
+    ).filter_by(
+        phone=phone
+    ).first()
+
+    if client:
+        return client
+
+    client = Client(
+
+        identity_id=
+            identity.id,
+
+        phone=phone,
+
+        full_name=
+            full_name
+            or
+            "کاربر جدید"
+    )
+
+    db.add(client)
+
+    db.commit()
+
+    db.refresh(client)
+
+    return client
+
+
+# =========================================================
+# LOGIN SUPPLIER
+# =========================================================
+
+def login_supplier(
+
+    db: Session,
+
+    phone,
+
+    password
+):
+
+    supplier = db.query(
+        Supplier
+    ).filter_by(
+        phone=phone
+    ).first()
+
+    if not supplier:
+
+        return {
+
+            "success": False,
+
+            "error":
+                "supplier_not_found"
+        }
+
+    if supplier.password != password:
+
+        return {
+
+            "success": False,
+
+            "error":
+                "wrong_password"
+        }
+
+    token = create_session(
+
+        supplier.identity_id,
+
+        "supplier"
+    )
+
+    return {
+
+        "success": True,
+
+        "token": token,
+
+        "supplier": supplier
+    }
+
+
+# =========================================================
+# LOGIN CLIENT
+# =========================================================
+
+def login_client(
+
+    db: Session,
+
+    phone
+):
+
+    client = db.query(
+        Client
+    ).filter_by(
+        phone=phone
+    ).first()
+
+    if not client:
+
+        client = register_client(
+
+            db,
+            phone
+        )
+
+    token = create_session(
+
+        client.identity_id,
+
+        "client"
+    )
+
+    return {
+
+        "success": True,
+
+        "token": token,
+
+        "client": client
+    }
+
+
+# =========================================================
+# TOKEN -> IDENTITY
+# =========================================================
+
+def get_identity_by_token(
+    token
+):
+
+    session = get_session(
+        token
+    )
+
+    if not session:
+        return None
+
+    return session[
+        "identity_id"
+    ]
+
+
+# =========================================================
+# TOKEN -> ROLE
+# =========================================================
+
+def get_role_by_token(
+    token
+):
+
+    session = get_session(
+        token
+    )
+
+    if not session:
+        return None
+
+    return session[
+        "role"
+    ]
+
+
+# =========================================================
+# TOKEN -> SUPPLIER
+# =========================================================
+
+def get_supplier_by_token(
+
+    db: Session,
+
+    token
+):
+
+    identity_id = (
+        get_identity_by_token(
+            token
+        )
+    )
+
+    if not identity_id:
+        return None
+
+    return db.query(
+        Supplier
+    ).filter_by(
+        identity_id=
+            identity_id
+    ).first()
+
+
+# =========================================================
+# TOKEN -> CLIENT
+# =========================================================
+
+def get_client_by_token(
+
+    db: Session,
+
+    token
+):
+
+    identity_id = (
+        get_identity_by_token(
+            token
+        )
+    )
+
+    if not identity_id:
+        return None
+
+    return db.query(
+        Client
+    ).filter_by(
+        identity_id=
+            identity_id
+    ).first()

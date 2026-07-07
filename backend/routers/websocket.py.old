@@ -1,0 +1,74 @@
+from fastapi import (
+    APIRouter,
+    WebSocket,
+    WebSocketDisconnect
+)
+
+from websocket.manager import (
+    ws_manager
+)
+
+router = APIRouter()
+
+
+# =====================================================
+# websocket endpoint
+# =====================================================
+
+@router.websocket("/ws/{supplier_id}")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    supplier_id: str
+):
+
+    await ws_manager.connect(
+        supplier_id,
+        websocket
+    )
+
+    try:
+
+        while True:
+
+            data = await websocket.receive_text()
+
+            # heartbeat
+            if data == "ping":
+
+                ws_manager.touch(
+                    supplier_id
+                )
+
+                await websocket.send_text(
+                    "pong"
+                )
+
+                continue
+
+            # generic ack
+            await websocket.send_json({
+
+                "type": "ack",
+
+                "message": "received"
+            })
+
+    except WebSocketDisconnect:
+
+        print(
+            f"❌ websocket disconnected: {supplier_id}"
+        )
+
+        await ws_manager.disconnect(
+            supplier_id
+        )
+
+    except Exception as e:
+
+        print(
+            f"❌ websocket error: {e}"
+        )
+
+        await ws_manager.disconnect(
+            supplier_id
+        )

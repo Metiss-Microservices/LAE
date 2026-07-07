@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+
+<head>
+
+<meta charset="UTF-8" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+<title>LAE — ثبت درخواست</title>
+
+<style>
+
+*{
+    box-sizing:border-box;
+}
+
+body{
+    margin:0;
+    padding:20px;
+    background:#f3f5f9;
+    font-family:tahoma,sans-serif;
+    color:#222;
+}
+
+.container{
+    max-width:760px;
+    margin:auto;
+}
+
+.card{
+
+    background:#fff;
+
+    border-radius:16px;
+
+    padding:22px;
+
+    box-shadow:0 4px 18px rgba(0,0,0,.06);
+
+    margin-bottom:18px;
+}
+
+h1{
+    margin-top:0;
+    font-size:24px;
+}
+
+.label{
+    margin-top:18px;
+    margin-bottom:8px;
+    font-size:14px;
+    color:#555;
+}
+
+input,
+select,
+textarea,
+button{
+
+    width:100%;
+
+    border:1px solid #ddd;
+
+    border-radius:10px;
+
+    padding:12px;
+
+    font-size:14px;
+}
+
+textarea{
+    min-height:120px;
+    resize:vertical;
+}
+
+button{
+
+    background:#0d6efd;
+
+    color:#fff;
+
+    border:none;
+
+    cursor:pointer;
+
+    font-weight:bold;
+
+    transition:.2s;
+}
+
+button:hover{
+    opacity:.92;
+}
+
+button:disabled{
+
+    background:#999;
+
+    cursor:not-allowed;
+}
+
+.hidden{
+    display:none;
+}
+
+.result{
+
+    margin-top:18px;
+}
+
+.success{
+    border-right:5px solid #19b36b;
+}
+
+.error{
+    border-right:5px solid #d33;
+}
+
+.info{
+    border-right:5px solid #0d6efd;
+}
+
+.badge{
+
+    display:inline-block;
+
+    background:#eef3ff;
+
+    color:#345;
+
+    padding:5px 10px;
+
+    border-radius:8px;
+
+    font-size:12px;
+
+    margin-left:6px;
+
+    margin-top:8px;
+}
+
+.row{
+    display:flex;
+    gap:12px;
+}
+
+.row > div{
+    flex:1;
+}
+
+.small{
+    font-size:13px;
+    color:#666;
+}
+
+.loading{
+    opacity:.7;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<div class="card">
+
+<h1>ثبت درخواست</h1>
+
+<div class="small">
+سیستم هوشمند اتصال مشتری به متخصص
+</div>
+
+<!-- TYPE -->
+
+<div class="label">نوع درخواست</div>
+
+<select id="type">
+
+    <option value="">
+        انتخاب کنید
+    </option>
+
+    <option value="service">
+        خدمات
+    </option>
+
+    <option value="product">
+        کالا
+    </option>
+
+</select>
+
+<!-- CATEGORY -->
+
+<div class="label">دسته‌بندی</div>
+
+<select id="category" disabled>
+
+    <option value="">
+        ابتدا نوع را انتخاب کنید
+    </option>
+
+</select>
+
+<!-- SUBCATEGORY -->
+
+<div class="label">زیر دسته</div>
+
+<select id="subcategory" disabled>
+
+    <option value="">
+        ابتدا دسته‌بندی را انتخاب کنید
+    </option>
+
+</select>
+
+<!-- CITY -->
+
+<div class="label">شهر</div>
+
+<select id="city">
+
+    <option value="">
+        در حال بارگذاری...
+    </option>
+
+</select>
+
+<!-- DISTRICT -->
+
+<div id="districtWrapper" class="hidden">
+
+    <div class="label">محله</div>
+
+    <select id="district">
+
+        <option value="">
+            انتخاب محله
+        </option>
+
+    </select>
+
+</div>
+
+<!-- NAME + PHONE -->
+
+<div class="row">
+
+    <div>
+
+        <div class="label">نام</div>
+
+        <input
+            id="name"
+            placeholder="مثلاً آرش"
+        />
+
+    </div>
+
+    <div>
+
+        <div class="label">شماره تماس</div>
+
+        <input
+            id="phone"
+            placeholder="0912..."
+        />
+
+    </div>
+
+</div>
+
+<!-- PROBLEM -->
+
+<div class="label">شرح درخواست</div>
+
+<textarea
+    id="problem"
+    placeholder="مشکل یا نیاز خود را توضیح دهید..."
+></textarea>
+
+<!-- SUBMIT -->
+
+<div style="margin-top:22px">
+
+<button id="submitBtn">
+
+    ثبت درخواست
+
+</button>
+
+</div>
+
+<!-- RESULT -->
+
+<div id="result" class="result"></div>
+
+</div>
+
+</div>
+
+<script>
+
+const API = "/api/v1"
+
+// ------------------------------------------------
+// DOM
+// ------------------------------------------------
+
+const typeEl = document.getElementById("type")
+
+const categoryEl = document.getElementById("category")
+
+const subcategoryEl = document.getElementById("subcategory")
+
+const cityEl = document.getElementById("city")
+
+const districtEl = document.getElementById("district")
+
+const districtWrapper =
+    document.getElementById("districtWrapper")
+
+const nameEl = document.getElementById("name")
+
+const phoneEl = document.getElementById("phone")
+
+const problemEl = document.getElementById("problem")
+
+const submitBtn = document.getElementById("submitBtn")
+
+const resultEl = document.getElementById("result")
+
+// ------------------------------------------------
+// CACHE
+// ------------------------------------------------
+
+let categories = []
+
+let locations = []
+
+// ------------------------------------------------
+// INIT
+// ------------------------------------------------
+
+window.onload = async () => {
+
+    await loadCategories()
+
+    await loadLocations()
+}
+
+// ------------------------------------------------
+// UI HELPERS
+// ------------------------------------------------
+
+function showResult(type, html){
+
+    resultEl.innerHTML = `
+        <div class="card ${type}">
+            ${html}
+        </div>
+    `
+}
+
+function setLoading(state){
+
+    submitBtn.disabled = state
+
+    if(state){
+
+        submitBtn.innerText =
+            "در حال ثبت..."
+
+        submitBtn.classList.add("loading")
+    }
+
+    else{
+
+        submitBtn.innerText =
+            "ثبت درخواست"
+
+        submitBtn.classList.remove("loading")
+    }
+}
+
+// ------------------------------------------------
+// LOAD CATEGORIES
+// ------------------------------------------------
+
+async function loadCategories(){
+
+    try{
+
+        const r = await fetch(
+            API + "/meta/categories"
+        )
+
+        const data = await r.json()
+
+        categories = data.categories || []
+
+    }catch(e){
+
+        console.error(e)
+
+        categories = []
+
+        showResult(
+            "error",
+            "❌ خطا در دریافت دسته‌بندی‌ها"
+        )
+    }
+}
+
+// ------------------------------------------------
+// LOAD LOCATIONS
+// ------------------------------------------------
+
+async function loadLocations(){
+
+    try{
+
+        const r = await fetch(
+            API + "/meta/locations"
+        )
+
+        const data = await r.json()
+
+        locations = data.locations || []
+
+        const cities =
+            locations.filter(
+                x => x.type === "city"
+            )
+
+        cityEl.innerHTML = `
+
+            <option value="">
+                انتخاب شهر
+            </option>
+
+            ${cities.map(c => `
+                <option value="${c.id}">
+                    ${c.name}
+                </option>
+            `).join("")}
+        `
+
+    }catch(e){
+
+        console.error(e)
+
+        locations = []
+
+        showResult(
+            "error",
+            "❌ خطا در دریافت موقعیت‌ها"
+        )
+    }
+}
+
+// ------------------------------------------------
+// TYPE CHANGE
+// ------------------------------------------------
+
+typeEl.onchange = () => {
+
+    const type = typeEl.value
+
+    categoryEl.disabled = false
+
+    subcategoryEl.disabled = true
+
+    const filtered =
+        (categories || []).filter(
+            c => c.type === type
+        )
+
+    categoryEl.innerHTML = `
+
+        <option value="">
+            انتخاب دسته‌بندی
+        </option>
+
+        ${filtered.map(c => `
+            <option value="${c.id}">
+                ${c.name}
+            </option>
+        `).join("")}
+    `
+
+    subcategoryEl.innerHTML = `
+        <option value="">
+            ابتدا دسته‌بندی را انتخاب کنید
+        </option>
+    `
+}
+
+// ------------------------------------------------
+// CATEGORY CHANGE
+// ------------------------------------------------
+
+categoryEl.onchange = async () => {
+
+    const id = categoryEl.value
+
+    if(!id){
+        return
+    }
+
+    try{
+
+        const r = await fetch(
+            API + "/meta/subcategories/" + id
+        )
+
+        const data = await r.json()
+
+        const subs =
+            data.subcategories || []
+
+        subcategoryEl.disabled = false
+
+        subcategoryEl.innerHTML = `
+
+            <option value="">
+                انتخاب زیر دسته
+            </option>
+
+            ${subs.map(s => `
+                <option value="${s.id}">
+                    ${s.name}
+                </option>
+            `).join("")}
+        `
+
+    }catch(e){
+
+        console.error(e)
+
+        showResult(
+            "error",
+            "❌ خطا در دریافت زیر دسته‌ها"
+        )
+    }
+}
+
+// ------------------------------------------------
+// CITY CHANGE
+// ------------------------------------------------
+
+cityEl.onchange = () => {
+
+    const cityId = cityEl.value
+
+    const districts =
+        (locations || []).filter(l =>
+
+            l.type === "district"
+
+            &&
+
+            l.parent_id === cityId
+        )
+
+    if(!districts.length){
+
+        districtWrapper.classList.add("hidden")
+
+        return
+    }
+
+    districtWrapper.classList.remove("hidden")
+
+    districtEl.innerHTML = `
+
+        <option value="">
+            انتخاب محله
+        </option>
+
+        ${districts.map(d => `
+            <option value="${d.id}">
+                ${d.name}
+            </option>
+        `).join("")}
+    `
+}
+
+// ------------------------------------------------
+// SUBMIT
+// ------------------------------------------------
+
+submitBtn.onclick = async () => {
+
+    const category_id =
+        categoryEl.value
+
+    const subcategory_id =
+        subcategoryEl.value
+
+    const location_id =
+
+        districtWrapper.classList.contains("hidden")
+
+        ?
+
+        cityEl.value
+
+        :
+
+        (
+            districtEl.value ||
+            cityEl.value
+        )
+
+    const payload = {
+
+        category_id,
+
+        subcategory_id,
+
+        location_id,
+
+        problem:
+            problemEl.value.trim(),
+
+        phone:
+            phoneEl.value.trim(),
+
+        name:
+            nameEl.value.trim()
+    }
+
+    if(
+
+        !typeEl.value ||
+
+        !payload.category_id ||
+
+        !payload.subcategory_id ||
+
+        !payload.location_id ||
+
+        !payload.problem ||
+
+        !payload.phone
+
+    ){
+
+        showResult(
+            "error",
+            "❌ همه فیلدهای ضروری را تکمیل کنید"
+        )
+
+        return
+    }
+
+    setLoading(true)
+
+    try{
+
+        const r = await fetch(
+            API + "/request",
+            {
+                method:"POST",
+
+                headers:{
+                    "Content-Type":"application/json"
+                },
+
+                body:JSON.stringify(payload)
+            }
+        )
+
+        const res = await r.json()
+
+        if(res.success){
+
+            showResult(
+                "success",
+
+                `
+
+                <h3>
+                    ✅ درخواست ثبت شد
+                </h3>
+
+                <div class="badge">
+                    Lead ID:
+                    ${res.lead_id}
+                </div>
+
+                <div class="badge">
+                    Match:
+                    ${res.matched}
+                </div>
+
+                <div style="margin-top:16px">
+                    درخواست شما برای متخصصان مرتبط ارسال شد.
+                </div>
+                `
+            )
+        }
+
+        else{
+
+            showResult(
+                "error",
+
+                `
+
+                ❌ خطا در ثبت درخواست
+
+                <hr>
+
+                ${res.error || "unknown_error"}
+                `
+            )
+        }
+
+    }catch(e){
+
+        console.error(e)
+
+        showResult(
+            "error",
+            "❌ ارتباط با سرور برقرار نشد"
+        )
+    }
+
+    setLoading(false)
+}
+
+</script>
+</body>
+
+</html>

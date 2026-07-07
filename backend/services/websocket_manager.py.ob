@@ -1,0 +1,44 @@
+# services/websocket_manager.py
+
+from fastapi import WebSocket
+from typing import Dict
+
+
+class ConnectionManager:
+
+    def __init__(self):
+        # supplier_id -> websocket
+        self.active_connections: Dict[str, WebSocket] = {}
+
+    # ---------------- CONNECT ----------------
+    async def connect(self, supplier_id: str, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections[supplier_id] = websocket
+
+    # ---------------- DISCONNECT ----------------
+    def disconnect(self, supplier_id: str):
+        if supplier_id in self.active_connections:
+            del self.active_connections[supplier_id]
+
+    # ---------------- SEND TO ONE ----------------
+    async def send_to_supplier(self, supplier_id: str, data: dict):
+        ws = self.active_connections.get(supplier_id)
+        if not ws:
+            return
+
+        try:
+            await ws.send_json(data)
+        except:
+            self.disconnect(supplier_id)
+
+    # ---------------- BROADCAST ----------------
+    async def broadcast(self, data: dict):
+        for sid, ws in list(self.active_connections.items()):
+            try:
+                await ws.send_json(data)
+            except:
+                self.disconnect(sid)
+
+
+# singleton
+manager = ConnectionManager()

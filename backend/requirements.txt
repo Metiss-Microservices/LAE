@@ -1,0 +1,57 @@
+	# ---------------- CORE ----------------
+
+fastapi==0.110.0
+uvicorn[standard]==0.29.0
+
+starlette==0.36.3
+pydantic
+
+# ---------------- DATABASE ----------------
+
+sqlalchemy
+psycopg2-binary==2.9.9
+
+# ---------------- REDIS ----------------
+
+redis==5.0.1
+
+# ---------------- SECURITY ----------------
+
+python-jose==3.3.0
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.9
+
+# ---------------- HTTP ----------------
+
+httpx==0.27.0
+requests==2.31.0
+
+# ---------------- WEBSOCKET ----------------
+
+websockets==12.0
+wsproto==1.2.0
+
+# ---------------- TELEGRAM ----------------
+
+aiogram==3.4.1
+
+# ---------------- ENV ----------------
+
+python-dotenv==1.0.1
+
+# ---------------- UTIL ----------------
+
+jdatetime==5.0.0
+
+typing_extensions==4.11.0
+
+# ---------------- ASYNC ----------------
+
+anyio==4.3.0
+sniffio==1.3.1
+
+# ---------------- LOW LEVEL ----------------
+
+click==8.1.7
+h11==0.14.0
+idna==3.6

@@ -1,0 +1,46 @@
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+from database import SessionLocal
+from models import LeadMatch
+from datetime import datetime
+
+router = APIRouter()
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@router.get("/supplier/leads/{supplier_id}")
+def get_supplier_leads(supplier_id: str, db: Session = Depends(get_db)):
+
+    now = datetime.utcnow()
+
+    matches = db.query(LeadMatch).filter_by(
+        supplier_id=supplier_id
+    ).all()
+
+    result = []
+
+    for m in matches:
+
+        if m.expires_at < now:
+            continue
+
+        if m.status != "pending":
+            continue
+
+        remaining = int((m.expires_at - now).total_seconds())
+
+        result.append({
+            "lead_id": str(m.lead_id),
+            "remaining": remaining
+        })
+
+    return {
+        "success": True,
+        "leads": result
+    }

@@ -1,0 +1,33 @@
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
+from database import get_db
+from models import Request
+from services.decision_service import decide_path
+
+router = APIRouter()
+
+
+@router.get("/decision")
+def select_path(request_id: int, choice: str, db: Session = Depends(get_db)):
+
+    # -----------------------------
+    # 1. validate request
+    # -----------------------------
+    req = db.query(Request).filter(Request.id == request_id).first()
+
+    if not req:
+        return {"error": "request_not_found"}
+
+    # -----------------------------
+    # 2. decide path
+    # -----------------------------
+    path = decide_path(choice)
+
+    # -----------------------------
+    # 3. response
+    # -----------------------------
+    return {
+        "request_id": request_id,
+        "selected_path": path
+    }

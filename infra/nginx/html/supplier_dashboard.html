@@ -1,0 +1,58 @@
+<html>
+<head>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<h2>Supplier Dashboard</h2>
+
+<input id="supplierId" placeholder="Supplier ID"/>
+<button onclick="loadLeads()">Load Leads</button>
+
+<div id="leads"></div>
+
+<script>
+function loadLeads(){
+  const supplierId = document.getElementById("supplierId").value;
+
+  fetch(`/api/v1/supplier/leads?supplier_id=${supplierId}`)
+    .then(res => res.json())
+    .then(data => {
+      const container = document.getElementById("leads");
+      container.innerHTML = "";
+
+      data.forEach(l => {
+        const div = document.createElement("div");
+        div.className = "card";
+
+        div.innerHTML = `
+          <p>Lead: ${l.lead_id}</p>
+          <p>Status: ${l.status}</p>
+          <p>Expires in: ${l.expires_in}s</p>
+          <button onclick="claimLead('${l.lead_id}', '${supplierId}')">Claim</button>
+        `;
+
+        container.appendChild(div);
+      });
+    });
+}
+
+function claimLead(leadId, supplierId){
+  fetch("/api/v1/claim", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({
+      lead_id: leadId,
+      supplier_id: supplierId
+    })
+  })
+  .then(res => res.json())
+  .then(res => {
+    alert(res.status);
+    loadLeads();
+  });
+}
+</script>
+
+</body>
+</html>

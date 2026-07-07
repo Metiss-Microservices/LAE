@@ -1,0 +1,47 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+.venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+
+# Environment
+.env
+.env.*
+
+# Logs
+*.log
+
+# Python cache
+.pytest_cache/
+.mypy_cache/
+
+# Docker
+postgres_data/
+redis_data/
+
+# Uploads
+uploads/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+dist/
+build/
+
+# Coverage
+.coverage
+htmlcov/
+
+# Local temp
+tmp/
+temp/

@@ -1,0 +1,198 @@
+from datetime import datetime
+from sqlalchemy.orm import Session
+
+import models
+
+from config import (
+    CLAIM_COST
+)
+
+
+def claim_lead(
+    db: Session,
+    supplier_id: int,
+    match_id: str
+):
+
+    # -------------------------------------------------
+    # MATCH
+    # -------------------------------------------------
+
+    match = db.query(models.LeadMatch).filter(
+        models.LeadMatch.match_id == match_id,
+        models.LeadMatch.supplier_id == supplier_id
+    ).first()
+
+    if not match:
+
+        return {
+            "success": False,
+            "error": "match_not_found"
+        }
+
+    # -------------------------------------------------
+    # STATUS
+    # -------------------------------------------------
+
+    if match.status != "pending":
+
+        return {
+            "success": False,
+            "error": "already_processed"
+        }
+
+    # -------------------------------------------------
+    # EXPIRE CHECK
+    # -------------------------------------------------
+
+    if (
+        match.expires_at and
+        match.expires_at < datetime.utcnow()
+    ):
+
+        match.status = "expired"
+
+        db.commit()
+
+        return {
+            "success": False,
+            "error": "expired"
+        }
+
+    # -------------------------------------------------
+    # SUPPLIER
+    # -------------------------------------------------
+
+    supplier = db.query(models.Supplier).filter(
+        models.Supplier.id == supplier_id
+    ).first()
+
+    if not supplier:
+
+        return {
+            "success": False,
+            "error": "supplier_not_found"
+        }
+
+    # -------------------------------------------------
+    # CREDIT CHECK
+    # -------------------------------------------------
+
+    if supplier.credit_balance < CLAIM_COST:
+
+        return {
+            "success": False,
+            "error": "not_enough_credit"
+        }
+
+    # -------------------------------------------------
+    # LEAD
+    # -------------------------------------------------
+
+    lead = db.query(models.Lead).filter(
+        models.Lead.id == match.lead_id
+    ).first()
+
+    if not lead:
+
+        return {
+            "success": False,
+            "error": "lead_not_found"
+        }
+
+    # -------------------------------------------------
+    # DOUBLE WIN PROTECTION
+    # -------------------------------------------------
+
+    already_claimed = db.query(models.LeadMatch).filter(
+        models.LeadMatch.lead_id == lead.id,
+        models.LeadMatch.status == "won"
+    ).first()
+
+    if already_claimed:
+
+        match.status = "lost"
+
+        db.commit()
+
+        return {
+            "success": False,
+            "error": "already_claimed"
+        }
+
+    # -------------------------------------------------
+    # DEDUCT CREDIT
+    # -------------------------------------------------
+
+    supplier.credit_balance -= CLAIM_COST
+
+    tx = models.CreditTransaction(
+
+        supplier_id=supplier.id,
+
+        amount=-CLAIM_COST,
+
+        type="claim_lead",
+
+        reference_id=str(match.match_id),
+
+        created_at=datetime.utcnow()
+    )
+
+    db.add(tx)
+
+    # -------------------------------------------------
+    # WIN MATCH
+    # -------------------------------------------------
+
+    match.status = "won"
+
+    match.won_at = datetime.utcnow()
+
+    supplier.wins += 1
+
+    supplier.total_jobs += 1
+
+    # -------------------------------------------------
+    # CLOSE OTHER MATCHES
+    # -------------------------------------------------
+
+    other_matches = db.query(models.LeadMatch).filter(
+        models.LeadMatch.lead_id == lead.id,
+        models.LeadMatch.id != match.id,
+        models.LeadMatch.status == "pending"
+    ).all()
+
+    for m in other_matches:
+
+        m.status = "lost"
+
+    # -------------------------------------------------
+    # COMMIT
+    # -------------------------------------------------
+
+    db.commit()
+
+    # -------------------------------------------------
+    # RESPONSE
+    # -------------------------------------------------
+
+    return {
+
+        "success": True,
+
+        "result": {
+
+            "status": "won",
+
+            "lead_id": lead.id,
+
+            "match_id": match.match_id,
+
+            "supplier_id": supplier.id,
+
+            "remaining_credit": supplier.credit_balance,
+
+            "phone": getattr(lead, "phone", None)
+        }
+    }
