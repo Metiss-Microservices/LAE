@@ -1,5 +1,4 @@
 from database import (
-
     engine,
     Base,
     SessionLocal
@@ -24,9 +23,7 @@ def init_db():
 
     try:
 
-        # -----------------------------------
         # demo clients
-        # -----------------------------------
 
         clients = [
 
@@ -47,9 +44,7 @@ def init_db():
 
         print("✅ clients inserted")
 
-        # -----------------------------------
         # demo suppliers
-        # -----------------------------------
 
         suppliers = [
 
