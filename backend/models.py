@@ -1,19 +1,11 @@
 from sqlalchemy import (
-
     Column,
-
     String,
-
     Integer,
-
     DateTime,
-
     ForeignKey,
-
     Float,
-
     Boolean,
-
     Text
 )
 
@@ -31,7 +23,6 @@ from database import Base
 
 
 def now():
-
     return datetime.utcnow()
 
 
@@ -273,7 +264,6 @@ class AuditLog(Base):
         DateTime,
         default=now
     )
-
 
 
 # =========================================================
@@ -1159,4 +1149,3 @@ class SupplierReview(Base):
         DateTime,
         default=now
     )
-
