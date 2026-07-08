@@ -10,50 +10,26 @@ from models import UserSession
 from config import SESSION_EXPIRE_DAYS
 
 
-def create_session(
-
-    db: Session,
-
-    identity_id,
-
-    role: str
-):
-
-    token = str(
-        uuid.uuid4()
-    )
+def create_session(db: Session, identity_id, role: str):
+    token = str(uuid.uuid4())
 
     session = UserSession(
-
         identity_id=identity_id,
-
         role=role,
-
         token=token,
-
         expires_at=(
             datetime.utcnow()
-            +
-            timedelta(
-                days=SESSION_EXPIRE_DAYS
-            )
+            + timedelta(days=SESSION_EXPIRE_DAYS)
         )
     )
 
     db.add(session)
-
     db.commit()
 
     return token
 
 
-def remove_session(
-
-    db: Session,
-
-    token: str
-):
-
+def remove_session(db: Session, token: str):
     db.query(
         UserSession
     ).filter_by(
@@ -63,13 +39,7 @@ def remove_session(
     db.commit()
 
 
-def get_session(
-
-    db: Session,
-
-    token: str
-):
-
+def get_session(db: Session, token: str):
     return db.query(
         UserSession
     ).filter_by(
