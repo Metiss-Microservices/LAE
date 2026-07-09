@@ -45,3 +45,6 @@ def get_session(db: Session, token: str):
     ).filter_by(
         token=token
     ).first()
+
+def get_session_by_token(db: Session, token: str):
+    return get_session(db, token)
