@@ -340,3 +340,35 @@ def build_system_message(
         "title": title,
         "body": body
     }
+
+# =========================================================
+# BACKWARD COMPATIBILITY
+# =========================================================
+
+def build_lead_message(
+    lead,
+    category_name,
+    subcategory_name,
+    location_name,
+):
+    return build_new_lead_message(
+        lead,
+        category_name,
+        subcategory_name,
+        location_name,
+    )
+
+# =========================================================
+# STARTUP
+# =========================================================
+
+async def startup_notifications():
+    """
+    Notification subsystem startup hook.
+
+    Phase 1 compatibility:
+    Currently there is no initialization required.
+    This function exists only because main.py awaits it.
+    """
+
+    return None

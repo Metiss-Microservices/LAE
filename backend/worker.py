@@ -1,14 +1,8 @@
 from time import sleep
 
 from database import SessionLocal
-
-from wallet.monthly_grants import (
-    run_monthly_grants
-)
-
-from services.auction_service import (
-    auto_finalize_expired_auctions
-)
+from services.auction_service import auto_finalize_expired_auctions
+from wallet.monthly_grants import run_monthly_grants
 
 
 # =========================================================
@@ -16,24 +10,16 @@ from services.auction_service import (
 # =========================================================
 
 def run_auction_worker():
-
-    db = SessionLocal()
-
     while True:
+        db = SessionLocal()
 
         try:
-
-            auto_finalize_expired_auctions(
-                db
-            )
-
+            auto_finalize_expired_auctions(db)
         except Exception as e:
-
-            print(
-                f"[auction_worker] {e}"
-            )
-
+            print(e)
             db.rollback()
+        finally:
+            db.close()
 
         sleep(5)
 
@@ -43,24 +29,15 @@ def run_auction_worker():
 # =========================================================
 
 def run_credit_worker():
-
-    db = SessionLocal()
-
     while True:
+        db = SessionLocal()
 
         try:
-
-            run_monthly_grants(
-                db
-            )
-
-        except Exception as e:
-
-            print(
-                f"[credit_worker] {e}"
-            )
-
+            run_monthly_grants(db)
+        except Exception:
             db.rollback()
+        finally:
+            db.close()
 
         sleep(3600)
 
@@ -70,36 +47,26 @@ def run_credit_worker():
 # =========================================================
 
 def start_workers():
-
     import threading
 
     auction_thread = threading.Thread(
-
         target=run_auction_worker,
-
-        daemon=True
+        daemon=True,
     )
 
     credit_thread = threading.Thread(
-
         target=run_credit_worker,
-
-        daemon=True
+        daemon=True,
     )
 
     auction_thread.start()
-
     credit_thread.start()
 
-    print(
-        "workers started"
-    )
+    print("workers started")
 
     while True:
-
         sleep(60)
 
 
 if __name__ == "__main__":
-
     start_workers()

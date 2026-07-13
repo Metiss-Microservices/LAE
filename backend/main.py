@@ -37,7 +37,7 @@ from websocket.router import router as websocket_router
 # IDENTITY
 # =========================================================
 
-from identity.dependencies import router as identity_router
+#from identity.dependencies import router as identity_router
 
 # =========================================================
 # ADMIN ROUTERS
@@ -175,10 +175,10 @@ def health():
 # IDENTITY
 # =========================================================
 
-app.include_router(
-    identity_router,
-    prefix=API_PREFIX,
-)
+#app.include_router(
+#    identity_router,
+#    prefix=API_PREFIX,
+#)
 
 # =========================================================
 # AUTH

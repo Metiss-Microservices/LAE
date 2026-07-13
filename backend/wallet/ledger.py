@@ -133,3 +133,61 @@ def get_last_wallet_tx(
         .order_by(models.WalletTransaction.created_at.desc())
         .first()
     )
+
+# =========================================================
+# BACKWARD COMPATIBILITY
+# =========================================================
+
+def create_wallet_transaction(
+    db,
+    supplier_id,
+    amount,
+    tx_type,
+    authority=None,
+    status="success",
+    reference_id=None,
+    balance_after=None,
+    description=None,
+):
+    return create_wallet_tx(
+        db=db,
+        supplier_id=supplier_id,
+        amount=amount,
+        tx_type=tx_type,
+        authority=authority,
+        status=status,
+        reference_id=reference_id,
+        balance_after=balance_after,
+        description=description,
+    )
+
+
+def create_credit_transaction(
+    db,
+    supplier_id,
+    amount,
+    tx_type,
+    reference_id=None,
+    balance_after=None,
+    description=None,
+):
+    return create_credit_tx(
+        db=db,
+        supplier_id=supplier_id,
+        amount=amount,
+        tx_type=tx_type,
+        reference_id=reference_id,
+        balance_after=balance_after,
+        description=description,
+    )
+
+# =========================================================
+# BACKWARD COMPATIBILITY
+# =========================================================
+
+def create_wallet_transaction(*args, **kwargs):
+    return create_wallet_tx(*args, **kwargs)
+
+
+def create_credit_transaction(*args, **kwargs):
+    return create_credit_tx(*args, **kwargs)

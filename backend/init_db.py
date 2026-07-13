@@ -1,53 +1,55 @@
 from database import (
     engine,
     Base,
-    SessionLocal
+    SessionLocal,
 )
 
 import models
 
 
 def init_db():
-
     print("🧨 resetting database...")
+    print("1")
+    print("Drop start")
 
-    Base.metadata.drop_all(
-        bind=engine
-    )
+    for table in reversed(Base.metadata.sorted_tables):
+        print("dropping:", table.name)
+        table.drop(bind=engine, checkfirst=True)
+        print("dropped:", table.name)
 
-    Base.metadata.create_all(
-        bind=engine
-    )
+    print("Drop finished")
+    # Base.metadata.drop_all(bind=engine)
+    print("2")
+    for table in Base.metadata.sorted_tables:
+        print("creating:", table.name)
+        table.create(bind=engine, checkfirst=True)
+        print("done:", table.name)
 
+    print("2.5")
+    Base.metadata.create_all(bind=engine)
+    print("3")
     db = SessionLocal()
-
+    print("4")
     try:
-
         # demo clients
-
         clients = [
-
             models.Client(
                 full_name="حسینی",
-                phone="09123333333"
+                phone="09123333333",
             ),
-
             models.Client(
                 full_name="محمدی",
-                phone="09124444444"
-            )
+                phone="09124444444",
+            ),
         ]
 
         db.add_all(clients)
-
         db.commit()
 
         print("✅ clients inserted")
 
         # demo suppliers
-
         suppliers = [
-
             models.Supplier(
                 full_name="تامین کننده نمونه 1",
                 phone="09125555555",
@@ -56,13 +58,9 @@ def init_db():
                 wallet_balance=1000000,
                 score=4.5,
                 wins=5,
-                total_jobs=10,
-                reputation_score=85,
-                success_rate=90,
                 is_verified=True,
-                is_active=True
+                is_active=True,
             ),
-
             models.Supplier(
                 full_name="تامین کننده نمونه 2",
                 phone="09126666666",
@@ -71,36 +69,27 @@ def init_db():
                 wallet_balance=500000,
                 score=3.9,
                 wins=2,
-                total_jobs=6,
-                reputation_score=70,
-                success_rate=75,
                 is_verified=False,
-                is_active=True
-            )
+                is_active=True,
+            ),
         ]
 
         db.add_all(suppliers)
-
         db.commit()
 
         print("✅ suppliers inserted")
-
         print("✅ database initialized")
 
     except Exception as e:
+        import traceback
 
+        traceback.print_exc()
         db.rollback()
-
-        print(
-            "❌ INIT ERROR:",
-            e
-        )
+        print("❌ INIT ERROR:", repr(e))
 
     finally:
-
         db.close()
 
 
 if __name__ == "__main__":
-
     init_db()

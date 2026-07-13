@@ -155,9 +155,7 @@ SESSION_EXPIRE_DAYS = int(
 )
 
 # =========================================================
-
 # PAYMENT
-
 # =========================================================
 
 PAYMENT_PROVIDER = os.getenv(
@@ -165,16 +163,59 @@ PAYMENT_PROVIDER = os.getenv(
     "zarinpal"
 )
 
+# Merchant ID (supports old & new env names)
 ZARINPAL_MERCHANT = os.getenv(
     "ZARINPAL_MERCHANT",
-    "sandbox"
+    os.getenv(
+        "ZARINPAL_MERCHANT_ID",
+        "sandbox"
+    )
 )
 
+# Old aliases
+ZARINPAL_MERCHANT_ID = ZARINPAL_MERCHANT
+
+# Sandbox flag
+ZARINPAL_SANDBOX = (
+    os.getenv(
+        "ZARINPAL_SANDBOX",
+        "true"
+    ).lower()
+    in (
+        "1",
+        "true",
+        "yes",
+        "on"
+    )
+)
+
+# Callback URL
 PAYMENT_CALLBACK = os.getenv(
     "PAYMENT_CALLBACK",
-    "http://localhost/api/v1/payment/callback"
+    os.getenv(
+        "ZARINPAL_CALLBACK_URL",
+        "http://localhost/api/v1/payment/callback"
+    )
 )
 
+# Old alias
+ZARINPAL_CALLBACK_URL = PAYMENT_CALLBACK
+
+# Optional API URL (for older implementations)
+ZARINPAL_API_URL = (
+    "https://sandbox.zarinpal.com/pg/v4/payment"
+    if ZARINPAL_SANDBOX
+    else
+    "https://payment.zarinpal.com/pg/v4/payment"
+)
+
+# Optional Verify URL
+ZARINPAL_VERIFY_URL = (
+    "https://sandbox.zarinpal.com/pg/v4/payment/verify.json"
+    if ZARINPAL_SANDBOX
+    else
+    "https://payment.zarinpal.com/pg/v4/payment/verify.json"
+)
 # =========================================================
 
 # TELEGRAM
@@ -286,3 +327,13 @@ WS_HEARTBEAT_SECONDS = int(
         "30"
     )
 )
+
+# =========================================================
+# EXPORTS
+# =========================================================
+
+__all__ = [
+    name
+    for name in globals()
+    if name.isupper()
+]

@@ -324,3 +324,118 @@ def get_balance_summary(
         "wins": supplier.wins or 0,
         "score": supplier.score or 0,
     }
+
+# =========================================================
+# BACKWARD COMPATIBILITY
+# =========================================================
+
+def wallet_to_credit(
+    db,
+    supplier_id,
+    wallet_amount,
+    credit_amount,
+):
+    """
+    Legacy wrapper.
+    """
+    return convert_wallet_to_credit(
+        db=db,
+        supplier_id=supplier_id,
+        wallet_amount=wallet_amount,
+        credit_amount=credit_amount,
+    )
+
+
+def credit_to_wallet(
+    db,
+    supplier_id,
+    credit_amount,
+    wallet_amount,
+):
+    """
+    Legacy API.
+    """
+    ok = deduct_credit(
+        db=db,
+        supplier_id=supplier_id,
+        amount=credit_amount,
+        tx_type="credit_to_wallet",
+    )
+
+    if not ok:
+        return False
+
+    add_wallet_balance(
+        db=db,
+        supplier_id=supplier_id,
+        amount=wallet_amount,
+        tx_type="credit_conversion",
+    )
+
+    return True
+
+
+def charge_wallet(
+    db,
+    supplier_id,
+    amount,
+    **kwargs,
+):
+    return add_wallet_balance(
+        db=db,
+        supplier_id=supplier_id,
+        amount=amount,
+        **kwargs,
+    )
+
+
+def increase_wallet(
+    db,
+    supplier_id,
+    amount,
+    **kwargs,
+):
+    return add_wallet_balance(
+        db=db,
+        supplier_id=supplier_id,
+        amount=amount,
+        **kwargs,
+    )
+
+
+def decrease_wallet(
+    db,
+    supplier_id,
+    amount,
+    **kwargs,
+):
+    return deduct_wallet_balance(
+        db=db,
+        supplier_id=supplier_id,
+        amount=amount,
+        **kwargs,
+    )
+
+
+def withdraw_wallet(
+    db,
+    supplier_id,
+    amount,
+    **kwargs,
+):
+    return deduct_wallet_balance(
+        db=db,
+        supplier_id=supplier_id,
+        amount=amount,
+        **kwargs,
+    )
+
+
+def get_balance(
+    db,
+    supplier_id,
+):
+    return get_balance_summary(
+        db=db,
+        supplier_id=supplier_id,
+    )
