@@ -520,20 +520,18 @@ def seed_master():
 def seed_suppliers(
     sub_map,
     districts,
-    cities_list
+    cities_list,
 ):
-
     print("👷 seeding suppliers...")
 
-    suppliers = []
+    all_locations = districts + cities_list
 
-    all_locations = (
-        districts +
-        cities_list
-    )
+    identities = []
+    suppliers = []
+    supplier_categories = []
+    supplier_subcategories = []
 
     for i in range(50):
-
         category_name = random.choice(
             list(sub_map.keys())
         )
@@ -546,74 +544,84 @@ def seed_suppliers(
             all_locations
         )
 
-        supplier = models.Supplier(
+        phone = f"0912{i:08}"
 
+        identity = models.UserIdentity(
             id=uuid4(),
-
-            full_name=
-                f"تأمین‌کننده {i}",
-
-            phone=
-                f"0912{i:08}",
-
-            password="1234",
-
-            category_id=
-                sub.category_id,
-
-            subcategory_id=
-                sub.id,
-
-            location_id=
-                location.id,
-
-            credit_balance=100,
-
-            wallet_balance=500000,
-
-            score=round(
-                random.uniform(3, 5),
-                2
-            ),
-
-            wins=random.randint(
-                0,
-                20
-            ),
-
-            total_jobs=random.randint(
-                5,
-                50
-            ),
-
-            reputation_score=round(
-                random.uniform(50, 95),
-                2
-            ),
-
-            success_rate=round(
-                random.uniform(40, 100),
-                2
-            ),
-
-            is_verified=random.choice([
-                True,
-                False
-            ]),
-
-            is_active=True
+            phone=phone,
         )
 
+        supplier = models.Supplier(
+            id=uuid4(),
+            identity_id=identity.id,
+            full_name=f"تأمین‌کننده {i}",
+            phone=phone,
+            password="1234",
+            location_id=location.id,
+            credit_balance=100,
+            wallet_balance=500000,
+            score=round(
+                random.uniform(3, 5),
+                2,
+            ),
+            wins=random.randint(
+                0,
+                20,
+            ),
+            rating_count=random.randint(
+                5,
+                50,
+            ),
+            completed_jobs=random.randint(
+                5,
+                50,
+            ),
+            cancelled_jobs=random.randint(
+                0,
+                5,
+            ),
+            response_speed=random.randint(
+                30,
+                120,
+            ),
+            is_verified=random.choice(
+                [True, False]
+            ),
+            is_active=True,
+            is_blocked=False,
+        )
+
+        identities.append(identity)
         suppliers.append(supplier)
 
+        supplier_categories.append(
+            models.SupplierCategory(
+                supplier_id=supplier.id,
+                category_id=sub.category_id,
+            )
+        )
+
+        supplier_subcategories.append(
+            models.SupplierSubCategory(
+                supplier_id=supplier.id,
+                subcategory_id=sub.id,
+            )
+        )
+
+    db.add_all(identities)
+    db.flush()
+
     db.add_all(suppliers)
+    db.flush()
+
+    db.add_all(supplier_categories)
+    db.add_all(supplier_subcategories)
 
     db.commit()
 
     print(
         f"✅ {len(suppliers)} suppliers inserted"
     )
-
 
 # =========================================================
 # LEADS

@@ -1,6 +1,10 @@
 from uuid import UUID
 
+from datetime import datetime
+
 from sqlalchemy.orm import Session
+
+import models
 
 from models import (
 
@@ -129,6 +133,87 @@ def register_supplier(
         "supplier": supplier
     }
 
+# =========================================================
+# ADMIN LOGIN
+# =========================================================
+
+def login_admin(
+    db: Session,
+    username: str,
+    password: str,
+):
+    admin = (
+        db.query(models.AdminUser)
+        .filter_by(username=username)
+        .first()
+    )
+
+    if not admin:
+        return {
+            "success": False,
+            "error": "invalid_credentials",
+        }
+
+    if not admin.is_active:
+        return {
+            "success": False,
+            "error": "admin_disabled",
+        }
+
+    # فعلاً برای سازگاری با داده‌های موجود.
+    # در فاز Security Hardening باید تمام پسوردها Hash شوند.
+    if str(admin.password) != str(password):
+        return {
+            "success": False,
+            "error": "invalid_credentials",
+        }
+
+    identity = None
+
+    if admin.identity_id:
+        identity = (
+            db.query(models.UserIdentity)
+            .filter_by(id=admin.identity_id)
+            .first()
+        )
+
+    if not identity:
+        identity_phone = (
+            f"admin:{admin.username}"
+        )
+
+        identity = (
+            db.query(models.UserIdentity)
+            .filter_by(phone=identity_phone)
+            .first()
+        )
+
+    if not identity:
+        identity = models.UserIdentity(
+            phone=f"admin:{admin.username}",
+        )
+
+        db.add(identity)
+        db.flush()
+
+    if admin.identity_id != identity.id:
+        admin.identity_id = identity.id
+
+    admin.last_login_at = datetime.utcnow()
+
+    db.flush()
+
+    token = create_session(
+        db=db,
+        identity_id=identity.id,
+        role="admin",
+    )
+
+    return {
+        "success": True,
+        "token": token,
+        "admin": admin,
+    }
 
 # =========================================================
 # supplier login
@@ -180,62 +265,68 @@ def login_supplier(
 
 
 # =========================================================
-# client login
+# CLIENT LOGIN
 # =========================================================
 
 def login_client(
-
-    db,
-
-    phone
+    db: Session,
+    phone: str,
 ):
-
-    client = db.query(
-        Client
-    ).filter_by(
-        phone=phone
-    ).first()
+    client = (
+        db.query(models.Client)
+        .filter_by(phone=phone)
+        .first()
+    )
 
     if not client:
+        return {
+            "success": False,
+            "error": "client_not_found",
+        }
 
-        identity = get_or_create_identity(
+    identity = None
 
-            db,
-
-            phone
+    # Client از قبل Identity دارد
+    if client.identity_id:
+        identity = (
+            db.query(models.UserIdentity)
+            .filter_by(id=client.identity_id)
+            .first()
         )
 
-        client = Client(
-
-            identity_id=identity.id,
-
-            phone=phone
+    # سازگاری با Clientهای قدیمی یا ساخته‌شده از مسیر Request
+    if not identity:
+        identity = (
+            db.query(models.UserIdentity)
+            .filter_by(phone=phone)
+            .first()
         )
 
-        db.add(client)
+    # اولین Login: ساخت Identity
+    if not identity:
+        identity = models.UserIdentity(
+            phone=phone,
+        )
 
-        db.commit()
+        db.add(identity)
+        db.flush()
 
-        db.refresh(client)
+    # اتصال Client به Identity
+    if client.identity_id != identity.id:
+        client.identity_id = identity.id
+        db.flush()
 
     token = create_session(
-
-        db,
-
-        client.identity_id,
-
-        "client"
+        db=db,
+        identity_id=identity.id,
+        role="client",
     )
 
     return {
-
         "success": True,
-
         "token": token,
-
-        "client": client
+        "client": client,
     }
-
 
 # =========================================================
 # token supplier

@@ -1,9 +1,16 @@
 # identity/dependencies.py
 
-from fastapi import Depends
-from fastapi import Header
+from datetime import datetime
+
+from fastapi import (
+    Depends,
+    Header,
+    HTTPException,
+)
 
 from sqlalchemy.orm import Session
+
+import models
 
 from database import get_db
 
@@ -21,16 +28,34 @@ def supplier_auth(
     token: str = Header(None),
     db: Session = Depends(get_db),
 ):
-    return get_supplier_by_token(db, token)
+    return get_supplier_by_token(
+        db,
+        token,
+    )
 
 
-# Backward compatibility
 def get_current_supplier(
     token: str = Header(None),
     db: Session = Depends(get_db),
 ):
-    return supplier_auth(token=token, db=db)
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="supplier_token_required",
+        )
 
+    supplier = get_supplier_by_token(
+        db,
+        token,
+    )
+
+    if not supplier:
+        raise HTTPException(
+            status_code=401,
+            detail="invalid_supplier_token",
+        )
+
+    return supplier
 
 # =========================================================
 # CLIENT AUTH
@@ -40,38 +65,88 @@ def client_auth(
     token: str = Header(None),
     db: Session = Depends(get_db),
 ):
-    return get_client_by_token(db, token)
+    return get_client_by_token(
+        db,
+        token,
+    )
 
 
-# Backward compatibility
 def get_current_client(
     token: str = Header(None),
     db: Session = Depends(get_db),
 ):
-    return client_auth(token=token, db=db)
+    return client_auth(
+        token=token,
+        db=db,
+    )
+
 
 # =========================================================
-# ADMIN AUTH (Temporary compatibility)
+# ADMIN AUTH
 # =========================================================
 
-def admin_required():
-    """
-    Temporary compatibility dependency.
+def admin_required(
+    token: str = Header(None),
+    db: Session = Depends(get_db),
+):
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="admin_token_required",
+        )
 
-    Phase 1:
-    Only keeps routers importable.
-    Real admin authentication will be implemented later.
-    """
-    return {
-        "id": "system",
-        "role": "admin",
-    }
+    session = (
+        db.query(models.UserSession)
+        .filter(
+            models.UserSession.token == token,
+            models.UserSession.role == "admin",
+        )
+        .first()
+    )
 
-def get_current_admin():
-    """
-    Temporary compatibility stub.
-    """
-    return {"role": "admin"}
+    if not session:
+        raise HTTPException(
+            status_code=401,
+            detail="invalid_admin_token",
+        )
+
+    if (
+        session.expires_at
+        and session.expires_at <= datetime.utcnow()
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="admin_session_expired",
+        )
+
+    admin = (
+        db.query(models.AdminUser)
+        .filter(
+            models.AdminUser.identity_id
+            == session.identity_id,
+            models.AdminUser.is_active.is_(True),
+        )
+        .first()
+    )
+
+    if not admin:
+        raise HTTPException(
+            status_code=403,
+            detail="admin_access_denied",
+        )
+
+    return admin
+
+
+def get_current_admin(
+    token: str = Header(None),
+    db: Session = Depends(get_db),
+):
+    return admin_required(
+        token=token,
+        db=db,
+    )
+
 
 # =========================================================
 # EXPORTS
@@ -85,4 +160,3 @@ __all__ = [
     "admin_required",
     "get_current_admin",
 ]
-

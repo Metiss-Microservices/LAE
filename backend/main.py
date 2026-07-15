@@ -4,7 +4,9 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi import Depends
 
+from identity.dependencies import admin_required
 from config import (
     PROJECT_NAME,
     PROJECT_VERSION,
@@ -275,49 +277,79 @@ app.include_router(
 app.include_router(
     admin_dashboard_router,
     prefix=API_PREFIX,
+    dependencies=[
+        Depends(admin_required),
+    ],
 )
 
 app.include_router(
     admin_suppliers_router,
     prefix=API_PREFIX,
+    dependencies=[
+        Depends(admin_required),
+    ],
 )
 
 app.include_router(
     admin_clients_router,
     prefix=API_PREFIX,
+    dependencies=[
+        Depends(admin_required),
+    ],
 )
 
 app.include_router(
     admin_leads_router,
     prefix=API_PREFIX,
+    dependencies=[
+        Depends(admin_required),
+    ],
 )
 
 app.include_router(
     admin_matches_router,
     prefix=API_PREFIX,
+    dependencies=[
+        Depends(admin_required),
+    ],
 )
 
 app.include_router(
     admin_payments_router,
     prefix=API_PREFIX,
+    dependencies=[
+        Depends(admin_required),
+    ],
 )
 
 app.include_router(
     admin_settings_router,
     prefix=API_PREFIX,
+    dependencies=[
+        Depends(admin_required),
+    ],
 )
 
 app.include_router(
     admin_channels_router,
     prefix=API_PREFIX,
+    dependencies=[
+        Depends(admin_required),
+    ],
 )
 
 app.include_router(
     admin_campaigns_router,
     prefix=API_PREFIX,
+    dependencies=[
+        Depends(admin_required),
+    ],
 )
 
 app.include_router(
     admin_reports_router,
     prefix=API_PREFIX,
+    dependencies=[
+        Depends(admin_required),
+    ],
 )

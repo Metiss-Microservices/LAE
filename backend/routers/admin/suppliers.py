@@ -386,46 +386,91 @@ def unverify_supplier(
 def admin_adjust_credit(
     supplier_id: str,
     payload: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-
-    supplier = db.query(
-        Supplier
-    ).filter(
-        Supplier.id == supplier_id
-    ).first()
-
-    if not supplier:
-
-        return {
-            "success": False,
-            "error": "supplier_not_found"
-        }
-
-    amount = int(
-        payload.get(
-            "amount",
-            0
+    supplier = (
+        db.query(Supplier)
+        .filter(
+            Supplier.id == supplier_id
         )
+        .with_for_update()
+        .first()
     )
 
-    supplier.credit_balance += amount
+    if not supplier:
+        return {
+            "success": False,
+            "error": "supplier_not_found",
+        }
+
+    try:
+        amount = int(
+            payload.get(
+                "amount",
+                0,
+            )
+        )
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return {
+            "success": False,
+            "error": "invalid_amount",
+        }
+
+    if amount == 0:
+        return {
+            "success": False,
+            "error": "amount_cannot_be_zero",
+        }
+
+    new_balance = (
+        int(supplier.credit_balance or 0)
+        + amount
+    )
+
+    if new_balance < 0:
+        return {
+            "success": False,
+            "error": "insufficient_credit",
+        }
+
+    description = payload.get(
+        "description",
+        "admin credit adjustment",
+    )
+
+    reference_id = payload.get(
+        "reference_id",
+    )
+
+    supplier.credit_balance = new_balance
 
     tx = CreditTransaction(
         supplier_id=supplier.id,
         amount=amount,
-        type="admin_adjustment"
+        type="admin_adjustment",
+        reference_id=reference_id,
+        balance_after=new_balance,
+        description=description,
     )
 
-    db.add(tx)
-    db.commit()
+    try:
+        db.add(tx)
+        db.commit()
+        db.refresh(tx)
+
+    except Exception:
+        db.rollback()
+        raise
 
     return {
         "success": True,
-        "credit_balance":
-            supplier.credit_balance
+        "transaction_id": str(tx.id),
+        "amount": amount,
+        "credit_balance": new_balance,
     }
-
 
 # =========================================================
 # WALLET ADJUST
@@ -435,47 +480,92 @@ def admin_adjust_credit(
 def admin_adjust_wallet(
     supplier_id: str,
     payload: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-
-    supplier = db.query(
-        Supplier
-    ).filter(
-        Supplier.id == supplier_id
-    ).first()
-
-    if not supplier:
-
-        return {
-            "success": False,
-            "error": "supplier_not_found"
-        }
-
-    amount = float(
-        payload.get(
-            "amount",
-            0
+    supplier = (
+        db.query(Supplier)
+        .filter(
+            Supplier.id == supplier_id
         )
+        .with_for_update()
+        .first()
     )
 
-    supplier.wallet_balance += amount
+    if not supplier:
+        return {
+            "success": False,
+            "error": "supplier_not_found",
+        }
+
+    try:
+        amount = float(
+            payload.get(
+                "amount",
+                0,
+            )
+        )
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return {
+            "success": False,
+            "error": "invalid_amount",
+        }
+
+    if amount == 0:
+        return {
+            "success": False,
+            "error": "amount_cannot_be_zero",
+        }
+
+    new_balance = (
+        float(supplier.wallet_balance or 0)
+        + amount
+    )
+
+    if new_balance < 0:
+        return {
+            "success": False,
+            "error": "insufficient_wallet_balance",
+        }
+
+    description = payload.get(
+        "description",
+        "admin wallet adjustment",
+    )
+
+    reference_id = payload.get(
+        "reference_id",
+    )
+
+    supplier.wallet_balance = new_balance
 
     tx = WalletTransaction(
         supplier_id=supplier.id,
         amount=amount,
         type="admin_adjustment",
-        status="success"
+        status="success",
+        reference_id=reference_id,
+        balance_after=new_balance,
+        description=description,
     )
 
-    db.add(tx)
-    db.commit()
+    try:
+        db.add(tx)
+        db.commit()
+        db.refresh(tx)
+
+    except Exception:
+        db.rollback()
+        raise
 
     return {
         "success": True,
-        "wallet_balance":
-            supplier.wallet_balance
+        "transaction_id": str(tx.id),
+        "amount": amount,
+        "wallet_balance": new_balance,
     }
-
 
 # =========================================================
 # TOP SUPPLIERS

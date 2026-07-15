@@ -1,5 +1,4 @@
-from datetime import datetime
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -13,6 +12,7 @@ from wallet.service import add_credit
 # =========================================================
 
 MONTHLY_FREE_CREDIT = 10
+GRANT_INTERVAL_DAYS = 30
 
 
 # =========================================================
@@ -20,21 +20,25 @@ MONTHLY_FREE_CREDIT = 10
 # =========================================================
 
 def is_eligible_for_monthly_grant(
-    supplier
+    supplier,
+    now: datetime | None = None,
 ):
+    now = now or datetime.utcnow()
 
-    last = getattr(
+    last_grant_at = getattr(
         supplier,
-        "last_monthly_grant_at",
-        None
+        "last_free_credit_at",
+        None,
     )
 
-    if not last:
+    if not last_grant_at:
         return True
 
     return (
-        datetime.utcnow() - last
-    ) >= timedelta(days=30)
+        now - last_grant_at
+    ) >= timedelta(
+        days=GRANT_INTERVAL_DAYS
+    )
 
 
 # =========================================================
@@ -43,32 +47,28 @@ def is_eligible_for_monthly_grant(
 
 def grant_monthly_credit(
     db: Session,
-    supplier
+    supplier,
 ):
+    now = datetime.utcnow()
 
     if not is_eligible_for_monthly_grant(
-        supplier
+        supplier,
+        now,
     ):
         return False
 
     add_credit(
-
         db=db,
-
         supplier_id=supplier.id,
-
         amount=MONTHLY_FREE_CREDIT,
-
         tx_type="monthly_grant",
-
-        reference_id="monthly_grant"
+        reference_id="monthly_grant",
     )
 
-    supplier.last_monthly_grant_at = (
-        datetime.utcnow()
-    )
+    supplier.last_free_credit_at = now
 
     db.commit()
+    db.refresh(supplier)
 
     return True
 
@@ -78,27 +78,31 @@ def grant_monthly_credit(
 # =========================================================
 
 def run_monthly_grants(
-    db: Session
+    db: Session,
 ):
+    suppliers = (
+        db.query(models.Supplier)
+        .filter(
+            models.Supplier.is_active.is_(True),
+            models.Supplier.is_blocked.is_(False),
+        )
+        .all()
+    )
 
-    suppliers = db.query(
-        models.Supplier
-    ).filter(
-
-        models.Supplier.is_active == True,
-
-        models.Supplier.is_blocked == False
-
-    ).all()
-
-    count = 0
+    granted_count = 0
 
     for supplier in suppliers:
+        try:
+            granted = grant_monthly_credit(
+                db,
+                supplier,
+            )
 
-        if grant_monthly_credit(
-            db,
-            supplier
-        ):
-            count += 1
+            if granted:
+                granted_count += 1
 
-    return count
+        except Exception:
+            db.rollback()
+            raise
+
+    return granted_count

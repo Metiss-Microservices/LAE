@@ -92,87 +92,80 @@ def build_ws_payload(
 async def dispatch_single_supplier(
     db: Session,
     lead_id,
-    supplier_id
+    supplier_id,
 ):
-
-    lead = db.query(
-        models.Lead
-    ).filter_by(
-        id=lead_id
-    ).first()
+    lead = (
+        db.query(models.Lead)
+        .filter_by(id=lead_id)
+        .first()
+    )
 
     if not lead:
         return False
 
-    supplier = db.query(
-        models.Supplier
-    ).filter_by(
-        id=supplier_id
-    ).first()
+    supplier = (
+        db.query(models.Supplier)
+        .filter_by(id=supplier_id)
+        .first()
+    )
 
     if not supplier:
         return False
 
-    match = db.query(
-        models.LeadMatch
-    ).filter_by(
-
-        lead_id=lead.id,
-
-        supplier_id=supplier.id
-
-    ).first()
+    match = (
+        db.query(models.LeadMatch)
+        .filter_by(
+            lead_id=lead.id,
+            supplier_id=supplier.id,
+        )
+        .first()
+    )
 
     if not match:
         return False
 
-    category = db.query(
-        models.Category
-    ).filter_by(
-        id=lead.category_id
-    ).first()
-
-    subcategory = db.query(
-        models.SubCategory
-    ).filter_by(
-        id=lead.subcategory_id
-    ).first()
-
-    message = build_lead_message(
-
-        category.name
-        if category
-        else "-",
-
-        subcategory.name
-        if subcategory
-        else "-",
-
-        lead.problem,
-
-        get_location_name(
-            db,
-            lead.location_id
-        )
+    category = (
+        db.query(models.Category)
+        .filter_by(id=lead.category_id)
+        .first()
     )
 
-    notify_supplier(
+    subcategory = (
+        db.query(models.SubCategory)
+        .filter_by(id=lead.subcategory_id)
+        .first()
+    )
+
+    location_name = get_location_name(
+        db,
+        lead.location_id,
+    )
+
+    message = build_lead_message(
+        lead,
+        category.name if category else "-",
+        subcategory.name if subcategory else "-",
+        location_name,
+    )
+
+    notification_result = notify_supplier(
         supplier,
-        message
+        message.get("title", "لید جدید"),
+        message.get("body", ""),
     )
 
     await emit_new_lead(
-
         supplier.id,
-
         build_ws_payload(
             lead,
-            match
-        )
+            match,
+        ),
     )
 
-    return True
-
+    return bool(
+        notification_result.get("sent")
+        or match
+    )
 
 # =========================================================
 # DISPATCH ALL

@@ -57,15 +57,59 @@ class UserSession(Base):
 class AdminUser(Base):
     __tablename__ = "admin_users"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    username = Column(String, unique=True, nullable=False)
-    password = Column(String, nullable=False)
-    role = Column(String, default="operator")
-    permissions = Column(Text, nullable=True)
-    is_active = Column(Boolean, default=True)
-    last_login_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=now)
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
 
+    identity_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("user_identities.id"),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
+
+    username = Column(
+        String,
+        unique=True,
+        nullable=False,
+        index=True,
+    )
+
+    password = Column(
+        String,
+        nullable=False,
+    )
+
+    role = Column(
+        String,
+        default="operator",
+        nullable=False,
+    )
+
+    permissions = Column(
+        Text,
+        nullable=True,
+    )
+
+    is_active = Column(
+        Boolean,
+        default=True,
+        nullable=False,
+    )
+
+    last_login_at = Column(
+        DateTime,
+        nullable=True,
+    )
+
+    created_at = Column(
+        DateTime,
+        default=now,
+        nullable=False,
+    )
 
 # =========================================================
 # SETTINGS
@@ -438,15 +482,50 @@ class LeadEvent(Base):
 class CreditTransaction(Base):
     __tablename__ = "credit_transactions"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    supplier_id = Column(
-        UUID(as_uuid=True), ForeignKey("suppliers.id")
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
     )
-    amount = Column(Integer)
-    type = Column(String)
-    description = Column(Text)
-    reference_id = Column(String, nullable=True)
-    created_at = Column(DateTime, default=now)
+
+    supplier_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("suppliers.id"),
+        nullable=False,
+        index=True,
+    )
+
+    amount = Column(
+        Integer,
+        nullable=False,
+    )
+
+    type = Column(
+        String,
+        nullable=False,
+    )
+
+    description = Column(
+        Text,
+        nullable=True,
+    )
+
+    reference_id = Column(
+        String,
+        nullable=True,
+        index=True,
+    )
+
+    balance_after = Column(
+        Integer,
+        nullable=True,
+    )
+
+    created_at = Column(
+        DateTime,
+        default=now,
+        nullable=False,
+    )
 
 
 # =========================================================
@@ -456,18 +535,62 @@ class CreditTransaction(Base):
 class WalletTransaction(Base):
     __tablename__ = "wallet_transactions"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    supplier_id = Column(
-        UUID(as_uuid=True), ForeignKey("suppliers.id")
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
     )
-    amount = Column(Float)
-    type = Column(String)
-    authority = Column(String, nullable=True)
-    description = Column(Text)
-    status = Column(String, default="pending")
-    created_at = Column(DateTime, default=now)
 
+    supplier_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("suppliers.id"),
+        nullable=False,
+        index=True,
+    )
 
+    amount = Column(
+        Float,
+        nullable=False,
+    )
+
+    type = Column(
+        String,
+        nullable=False,
+    )
+
+    authority = Column(
+        String,
+        nullable=True,
+        index=True,
+    )
+
+    description = Column(
+        Text,
+        nullable=True,
+    )
+
+    status = Column(
+        String,
+        default="pending",
+        nullable=False,
+    )
+
+    reference_id = Column(
+        String,
+        nullable=True,
+        index=True,
+    )
+
+    balance_after = Column(
+        Float,
+        nullable=True,
+    )
+
+    created_at = Column(
+        DateTime,
+        default=now,
+        nullable=False,
+    )
 # =========================================================
 # PAYMENT TRANSACTION
 # =========================================================

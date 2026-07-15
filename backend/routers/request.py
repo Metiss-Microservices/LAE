@@ -27,116 +27,79 @@ router = APIRouter(
 # =========================================================
 
 @router.post("")
-def create_request(
+async def create_request(
     payload: dict,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-
     required = [
-
         "category_id",
         "subcategory_id",
         "location_id",
         "problem",
-        "phone"
+        "phone",
     ]
 
     for field in required:
-
         if not payload.get(field):
-
             return {
-
                 "success": False,
-
-                "error":
-                    f"missing_{field}"
+                "error": f"missing_{field}",
             }
 
-    client = db.query(
-        models.Client
-    ).filter_by(
-        phone=payload["phone"]
-    ).first()
+    client = (
+        db.query(models.Client)
+        .filter_by(phone=payload["phone"])
+        .first()
+    )
 
     if not client:
-
         client = models.Client(
-
             full_name=payload.get(
                 "full_name",
-                "کاربر"
+                "کاربر",
             ),
-
-            phone=payload["phone"]
+            phone=payload["phone"],
         )
 
         db.add(client)
-
         db.commit()
-
         db.refresh(client)
 
     lead = models.Lead(
-
-        client_id=
-            client.id,
-
-        category_id=
-            payload["category_id"],
-
-        subcategory_id=
-            payload["subcategory_id"],
-
-        location_id=
-            payload["location_id"],
-
-        problem=
-            payload["problem"],
-
-        priority_mode=
-            payload.get(
-                "priority_mode",
-                "smart"
-            ),
-
+        client_id=client.id,
+        category_id=payload["category_id"],
+        subcategory_id=payload["subcategory_id"],
+        location_id=payload["location_id"],
+        problem=payload["problem"],
+        priority_mode=payload.get(
+            "priority_mode",
+            "smart",
+        ),
         status="open",
-
-        created_at=
-            datetime.utcnow()
+        created_at=datetime.utcnow(),
     )
 
     db.add(lead)
-
     db.commit()
-
     db.refresh(lead)
 
-    result = process_new_lead(
+    result = await process_new_lead(
         db,
-        lead.id
+        lead.id,
     )
 
     return {
-
         "success": True,
-
-        "lead_id":
-            str(lead.id),
-
-        "matches":
-            result.get(
-                "matches",
-                0
-            ),
-
-        "notifications":
-            result.get(
-                "notifications",
-                0
-            )
+        "lead_id": str(lead.id),
+        "matches": result.get(
+            "matches",
+            0,
+        ),
+        "notifications": result.get(
+            "notifications",
+            0,
+        ),
     }
-
 
 # =========================================================
 # LEAD STATUS

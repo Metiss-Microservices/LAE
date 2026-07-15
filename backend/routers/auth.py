@@ -21,6 +21,8 @@ from identity.service import (
 
     register_supplier,
 
+    login_admin,
+
     login_supplier,
 
     login_client,
@@ -124,6 +126,51 @@ def supplier_register(
         }
     }
 
+# =========================================================
+# ADMIN LOGIN
+# =========================================================
+
+@router.post("/admin/login")
+def admin_login(
+    payload: dict,
+    db: Session = Depends(get_db),
+):
+    username = payload.get(
+        "username"
+    )
+
+    password = payload.get(
+        "password"
+    )
+
+    if not username or not password:
+        return {
+            "success": False,
+            "error": "missing_fields",
+        }
+
+    result = login_admin(
+        db=db,
+        username=username,
+        password=password,
+    )
+
+    if not result.get("success"):
+        return result
+
+    admin = result["admin"]
+
+    return {
+        "success": True,
+        "token": result["token"],
+        "admin": {
+            "id": str(admin.id),
+            "username": admin.username,
+            "role": admin.role,
+            "permissions": admin.permissions,
+        },
+    }
+
 
 # =========================================================
 # SUPPLIER LOGIN
@@ -202,12 +249,9 @@ def supplier_login(
 
 @router.post("/client/login")
 def client_login(
-
     payload: dict,
-
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-
     phone = payload.get(
         "phone"
     )
@@ -217,57 +261,42 @@ def client_login(
     )
 
     if not phone or not code:
-
         return {
-
             "success": False,
-
-            "error":
-                "missing_fields"
+            "error": "missing_fields",
         }
 
-    if not verify_otp(
+    otp_result = verify_otp(
         phone,
-        code
+        code,
+    )
+
+    if not otp_result.get(
+        "success"
     ):
-
-        return {
-
-            "success": False,
-
-            "error":
-                "invalid_otp"
-        }
+        return otp_result
 
     result = login_client(
-
         db,
-
-        phone
+        phone,
     )
+
+    if not result.get(
+        "success"
+    ):
+        return result
 
     client = result["client"]
 
     return {
-
         "success": True,
-
-        "token":
-            result["token"],
-
+        "token": result["token"],
         "client": {
-
-            "id":
-                str(client.id),
-
-            "phone":
-                client.phone,
-
-            "name":
-                client.full_name
-        }
+            "id": str(client.id),
+            "phone": client.phone,
+            "name": client.full_name,
+        },
     }
-
 
 # =========================================================
 # CURRENT SUPPLIER

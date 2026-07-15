@@ -32,14 +32,36 @@ router = APIRouter(prefix="/supplier")
 # =========================================================
 # AUTH
 # =========================================================
-def auth(token: str):
-    supplier_id = get_supplier_by_token(token)
 
-    if not supplier_id:
+def auth(
+    db: Session,
+    token: str,
+):
+    if not token:
         return None
 
-    return UUID(supplier_id)
+    supplier = get_supplier_by_token(
+        db,
+        token,
+    )
 
+    if not supplier:
+        return None
+
+    # V7 identity service returns the Supplier object.
+    supplier_id = getattr(
+        supplier,
+        "id",
+        supplier,
+    )
+
+    if isinstance(supplier_id, UUID):
+        return supplier_id
+
+    try:
+        return UUID(str(supplier_id))
+    except (ValueError, TypeError, AttributeError):
+        return None
 
 # =========================================================
 # LOCATION HELPER
@@ -62,46 +84,113 @@ def get_location_name(db: Session, location_id):
 # =========================================================
 # PROFILE
 # =========================================================
+
 @router.get("/me")
-def me(token: str = Header(None), db: Session = Depends(get_db)):
-    supplier_id = auth(token)
-
-    if not supplier_id:
-        return {"success": False, "error": "unauthorized"}
-
-    supplier = db.query(Supplier).filter_by(id=supplier_id).first()
-
-    if not supplier:
-        return {"success": False, "error": "supplier_not_found"}
-
-    supplier_categories = (
-        db.query(SupplierCategory).filter_by(supplier_id=supplier.id).all()
+def me(
+    token: str = Header(None),
+    db: Session = Depends(get_db),
+):
+    supplier_id = auth(
+        db,
+        token,
     )
 
-    services = []
+    if not supplier_id:
+        return {
+            "success": False,
+            "error": "unauthorized",
+        }
 
-    rows = (
-        db.query(models.SupplierService)
+    supplier = (
+        db.query(Supplier)
+        .filter_by(id=supplier_id)
+        .first()
+    )
+
+    if not supplier:
+        return {
+            "success": False,
+            "error": "supplier_not_found",
+        }
+
+    category_rows = (
+        db.query(SupplierCategory)
         .filter_by(supplier_id=supplier.id)
         .all()
     )
 
-    for row in rows:
-        category = db.query(Category).filter_by(id=row.category_id).first()
-        subcategory = (
-            db.query(SubCategory).filter_by(id=row.subcategory_id).first()
+    subcategory_rows = (
+        db.query(models.SupplierSubCategory)
+        .filter_by(supplier_id=supplier.id)
+        .all()
+    )
+
+    subcategory_map = {
+        row.subcategory_id: row
+        for row in subcategory_rows
+    }
+
+    services = []
+
+    for row in category_rows:
+        category = (
+            db.query(Category)
+            .filter_by(id=row.category_id)
+            .first()
         )
+
+        subcategory_id = getattr(
+            row,
+            "subcategory_id",
+            None,
+        )
+
+        # سازگاری با حالتی که subcategory در جدول مستقل V7 ذخیره شده است
+        if not subcategory_id and subcategory_rows:
+            related_subcategory = next(
+                iter(subcategory_map.values()),
+                None,
+            )
+
+            if related_subcategory:
+                subcategory_id = (
+                    related_subcategory.subcategory_id
+                )
+
+        subcategory = None
+
+        if subcategory_id:
+            subcategory = (
+                db.query(SubCategory)
+                .filter_by(id=subcategory_id)
+                .first()
+            )
 
         services.append(
             {
                 "category_id": str(row.category_id),
-                "category": category.name if category else None,
-                "subcategory_id": str(row.subcategory_id),
-                "subcategory": subcategory.name if subcategory else None,
+                "category": (
+                    category.name
+                    if category
+                    else None
+                ),
+                "subcategory_id": (
+                    str(subcategory_id)
+                    if subcategory_id
+                    else None
+                ),
+                "subcategory": (
+                    subcategory.name
+                    if subcategory
+                    else None
+                ),
             }
         )
 
-    reputation = calculate_supplier_reputation(db, supplier.id)
+    reputation = calculate_supplier_reputation(
+        db,
+        supplier.id,
+    )
 
     return {
         "success": True,
@@ -110,21 +199,55 @@ def me(token: str = Header(None), db: Session = Depends(get_db)):
             "full_name": supplier.full_name,
             "phone": supplier.phone,
             "services": services,
-            "location": get_location_name(db, supplier.location_id),
-            "credit_balance": supplier.credit_balance,
-            "wallet_balance": supplier.wallet_balance,
-            "score": supplier.score,
-            "wins": supplier.wins,
-            "verified": supplier.is_verified,
-            "active": supplier.is_active,
-            "online": str(supplier.id) in manager.suppliers,
-            "rating_avg": reputation.get("rating_avg"),
-            "review_count": reputation.get("review_count"),
-            "success_rate": reputation.get("success_rate"),
-            "trust_score": reputation.get("trust_score"),
+            "location_id": (
+                str(supplier.location_id)
+                if supplier.location_id
+                else None
+            ),
+            "location": get_location_name(
+                db,
+                supplier.location_id,
+            ),
+            "credit_balance": (
+                supplier.credit_balance or 0
+            ),
+            "wallet_balance": (
+                supplier.wallet_balance or 0
+            ),
+            "score": supplier.score or 0,
+            "wins": supplier.wins or 0,
+            "verified": bool(
+                supplier.is_verified
+            ),
+            "active": bool(
+                supplier.is_active
+            ),
+            "blocked": bool(
+                supplier.is_blocked
+            ),
+            "online": bool(
+                manager.supplier_connections.get(
+                str(supplier.id)
+              )
+            ),
+            "rating_avg": reputation.get(
+                "rating_avg",
+                0,
+            ),
+            "review_count": reputation.get(
+                "review_count",
+                0,
+            ),
+            "success_rate": reputation.get(
+                "success_rate",
+                0,
+            ),
+            "trust_score": reputation.get(
+                "trust_score",
+                0,
+            ),
         },
     }
-
 
 # =========================================================
 # UPDATE PROFILE
@@ -133,7 +256,7 @@ def me(token: str = Header(None), db: Session = Depends(get_db)):
 def update_profile(
     payload: dict, token: str = Header(None), db: Session = Depends(get_db)
 ):
-    supplier_id = auth(token)
+    supplier_id = auth(db, token)
 
     if not supplier_id:
         return {"success": False, "error": "unauthorized"}
@@ -181,7 +304,7 @@ def update_profile(
 # =========================================================
 @router.get("/leads")
 def live_leads(token: str = Header(None), db: Session = Depends(get_db)):
-    supplier_id = auth(token)
+    supplier_id = auth(db, token)
 
     if not supplier_id:
         return {"success": False, "error": "unauthorized"}
@@ -240,7 +363,7 @@ def live_leads(token: str = Header(None), db: Session = Depends(get_db)):
 def bid(
     payload: dict, token: str = Header(None), db: Session = Depends(get_db)
 ):
-    supplier_id = auth(token)
+    supplier_id = auth(db, token)
 
     if not supplier_id:
         return {"success": False, "error": "unauthorized"}
@@ -261,7 +384,7 @@ def bid(
 async def claim(
     payload: dict, token: str = Header(None), db: Session = Depends(get_db)
 ):
-    supplier_id = auth(token)
+    supplier_id = auth(db, token)
 
     if not supplier_id:
         return {"success": False, "error": "unauthorized"}
@@ -279,7 +402,7 @@ async def claim(
 # =========================================================
 @router.get("/won")
 def won_leads(token: str = Header(None), db: Session = Depends(get_db)):
-    supplier_id = auth(token)
+    supplier_id = auth(db, token)
 
     if not supplier_id:
         return {"success": False}
@@ -318,7 +441,7 @@ def won_leads(token: str = Header(None), db: Session = Depends(get_db)):
 # =========================================================
 @router.get("/history")
 def history(token: str = Header(None), db: Session = Depends(get_db)):
-    supplier_id = auth(token)
+    supplier_id = auth(db, token)
 
     if not supplier_id:
         return {"success": False}
@@ -361,7 +484,7 @@ def history(token: str = Header(None), db: Session = Depends(get_db)):
 def lead_details(
     lead_id: str, token: str = Header(None), db: Session = Depends(get_db)
 ):
-    supplier_id = auth(token)
+    supplier_id = auth(db, token)
 
     if not supplier_id:
         return {"success": False}
@@ -404,7 +527,7 @@ def lead_details(
 def race_status(
     match_id: str, token: str = Header(None), db: Session = Depends(get_db)
 ):
-    supplier_id = auth(token)
+    supplier_id = auth(db, token)
 
     if not supplier_id:
         return {"success": False}
@@ -433,7 +556,7 @@ def race_status(
 def auction_status(
     lead_id: str, token: str = Header(None), db: Session = Depends(get_db)
 ):
-    supplier_id = auth(token)
+    supplier_id = auth(db, token)
 
     if not supplier_id:
         return {"success": False}
@@ -462,7 +585,7 @@ def auction_status(
 def contact_info(
     lead_id: str, token: str = Header(None), db: Session = Depends(get_db)
 ):
-    supplier_id = auth(token)
+    supplier_id = auth(db, token)
 
     if not supplier_id:
         return {"success": False}
@@ -497,7 +620,7 @@ def contact_info(
 def wallet_history(
     token: str = Header(None), db: Session = Depends(get_db)
 ):
-    supplier_id = auth(token)
+    supplier_id = auth(db, token)
 
     if not supplier_id:
         return {"success": False}
@@ -534,7 +657,7 @@ def wallet_history(
 def credit_history(
     token: str = Header(None), db: Session = Depends(get_db)
 ):
-    supplier_id = auth(token)
+    supplier_id = auth(db, token)
 
     if not supplier_id:
         return {"success": False}
@@ -566,17 +689,29 @@ def credit_history(
 # =========================================================
 # REVIEWS
 # =========================================================
+
 @router.get("/reviews")
-def reviews(token: str = Header(None), db: Session = Depends(get_db)):
-    supplier_id = auth(token)
+def reviews(
+    token: str = Header(None),
+    db: Session = Depends(get_db)
+):
+
+    supplier_id = auth(db, token)
 
     if not supplier_id:
-        return {"success": False}
+        return {
+            "success": False,
+            "error": "unauthorized"
+        }
 
     rows = (
         db.query(SupplierReview)
-        .filter_by(supplier_id=supplier_id)
-        .order_by(SupplierReview.created_at.desc())
+        .filter_by(
+            supplier_id=supplier_id
+        )
+        .order_by(
+            SupplierReview.created_at.desc()
+        )
         .limit(100)
         .all()
     )
@@ -584,24 +719,37 @@ def reviews(token: str = Header(None), db: Session = Depends(get_db)):
     result = []
 
     for row in rows:
-        result.append(
-            {
-                "id": str(row.id),
-                "rating": row.rating,
-                "review": row.review,
-                "created_at": row.created_at,
-            }
-        )
 
-    return {"success": True, "items": result}
+        result.append({
 
+            "id": str(row.id),
+
+            "lead_id": str(row.lead_id),
+
+            "rating": float(row.rating),
+
+            "comment": row.comment,
+
+            "created_at": (
+                row.created_at.isoformat()
+                if row.created_at
+                else None
+            )
+        })
+
+    return {
+
+        "success": True,
+
+        "items": result
+    }
 
 # =========================================================
 # STATISTICS
 # =========================================================
 @router.get("/stats")
 def statistics(token: str = Header(None), db: Session = Depends(get_db)):
-    supplier_id = auth(token)
+    supplier_id = auth(db, token)
 
     if not supplier_id:
         return {"success": False}
@@ -654,7 +802,7 @@ def statistics(token: str = Header(None), db: Session = Depends(get_db)):
 # =========================================================
 @router.get("/dashboard")
 def dashboard(token: str = Header(None), db: Session = Depends(get_db)):
-    supplier_id = auth(token)
+    supplier_id = auth(db, token)
 
     if not supplier_id:
         return {"success": False}
@@ -706,7 +854,7 @@ def dashboard(token: str = Header(None), db: Session = Depends(get_db)):
 def notification_settings(
     payload: dict, token: str = Header(None), db: Session = Depends(get_db)
 ):
-    supplier_id = auth(token)
+    supplier_id = auth(db, token)
 
     if not supplier_id:
         return {"success": False}
@@ -735,7 +883,7 @@ def notification_settings(
 # =========================================================
 @router.get("/channels")
 def channels(token: str = Header(None), db: Session = Depends(get_db)):
-    supplier_id = auth(token)
+    supplier_id = auth(db, token)
 
     if not supplier_id:
         return {"success": False}

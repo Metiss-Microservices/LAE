@@ -1,83 +1,153 @@
 from datetime import datetime
 
-#
-# V7
-# replace with redis later
-#
+from services.redis_client import r
 
-_otp_store = {}
 
+# =========================================================
+# CONFIG
+# =========================================================
+
+OTP_KEY_PREFIX = "lae:otp:"
+
+
+def _otp_key(
+    phone: str,
+) -> str:
+    return f"{OTP_KEY_PREFIX}{phone}"
+
+
+# =========================================================
+# SAVE
+# =========================================================
 
 def save_otp(
     phone: str,
     code: str,
-    expires_at: datetime
+    expires_at: datetime,
 ):
-
-    _otp_store[phone] = {
-
-        "phone": phone,
-
-        "code": str(code),
-
-        "expires_at": expires_at,
-
-        "created_at": datetime.utcnow(),
-
-        "attempts": 0
-    }
-
-
-def get_otp(
-    phone: str
-):
-
-    return _otp_store.get(
-        phone
-    )
-
-
-def delete_otp(
-    phone: str
-):
-
-    _otp_store.pop(
-        phone,
-        None
-    )
-
-
-def increment_attempt(
-    phone: str
-):
-
-    item = _otp_store.get(
-        phone
-    )
-
-    if not item:
-        return
-
-    item["attempts"] += 1
-
-
-def cleanup_expired():
+    key = _otp_key(phone)
 
     now = datetime.utcnow()
 
-    expired = []
+    ttl = int(
+        (
+            expires_at - now
+        ).total_seconds()
+    )
 
-    for phone, item in _otp_store.items():
+    if ttl <= 0:
+        ttl = 1
 
-        if item["expires_at"] <= now:
+    pipe = r.pipeline()
 
-            expired.append(
-                phone
-            )
+    pipe.hset(
+        key,
+        mapping={
+            "phone": phone,
+            "code": str(code),
+            "expires_at": expires_at.isoformat(),
+            "created_at": now.isoformat(),
+            "attempts": "0",
+        },
+    )
 
-    for phone in expired:
+    pipe.expire(
+        key,
+        ttl,
+    )
 
-        _otp_store.pop(
-            phone,
-            None
+    pipe.execute()
+
+
+# =========================================================
+# GET
+# =========================================================
+
+def get_otp(
+    phone: str,
+):
+    key = _otp_key(phone)
+
+    item = r.hgetall(key)
+
+    if not item:
+        return None
+
+    try:
+        expires_at = datetime.fromisoformat(
+            item["expires_at"]
         )
+
+        created_at = datetime.fromisoformat(
+            item["created_at"]
+        )
+
+        attempts = int(
+            item.get(
+                "attempts",
+                0,
+            )
+        )
+
+    except (
+        KeyError,
+        TypeError,
+        ValueError,
+    ):
+        delete_otp(phone)
+        return None
+
+    return {
+        "phone": item.get(
+            "phone",
+            phone,
+        ),
+        "code": item.get(
+            "code",
+            "",
+        ),
+        "expires_at": expires_at,
+        "created_at": created_at,
+        "attempts": attempts,
+    }
+
+
+# =========================================================
+# DELETE
+# =========================================================
+
+def delete_otp(
+    phone: str,
+):
+    r.delete(
+        _otp_key(phone)
+    )
+
+
+# =========================================================
+# ATTEMPTS
+# =========================================================
+
+def increment_attempt(
+    phone: str,
+):
+    key = _otp_key(phone)
+
+    if not r.exists(key):
+        return
+
+    r.hincrby(
+        key,
+        "attempts",
+        1,
+    )
+
+
+# =========================================================
+# CLEANUP
+# =========================================================
+
+def cleanup_expired():
+    # Redis removes expired OTP keys automatically.
+    # This function remains for compatibility with otp.service.
+    return 0

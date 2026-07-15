@@ -3,9 +3,9 @@ from sqlalchemy.orm import Session
 from models import (
     Supplier,
     SupplierReview,
-    LeadMatch
+    Lead,
+    LeadMatch,
 )
-
 
 # =========================================================
 # CAN REVIEW
@@ -15,33 +15,49 @@ def can_review(
     db: Session,
     supplier_id,
     client_id,
-    lead_id
+    lead_id,
 ):
+    lead = (
+        db.query(Lead)
+        .filter_by(
+            id=lead_id,
+            client_id=client_id,
+            winner_supplier_id=supplier_id,
+            status="claimed",
+        )
+        .first()
+    )
 
-    match = db.query(
-        LeadMatch
-    ).filter_by(
-        lead_id=lead_id,
-        supplier_id=supplier_id,
-        status="won"
-    ).first()
+    if not lead:
+        return False
+
+    match = (
+        db.query(LeadMatch)
+        .filter_by(
+            lead_id=lead_id,
+            supplier_id=supplier_id,
+            status="won",
+        )
+        .first()
+    )
 
     if not match:
         return False
 
-    existing = db.query(
-        SupplierReview
-    ).filter_by(
-        supplier_id=supplier_id,
-        client_id=client_id,
-        lead_id=lead_id
-    ).first()
+    existing = (
+        db.query(SupplierReview)
+        .filter_by(
+            supplier_id=supplier_id,
+            client_id=client_id,
+            lead_id=lead_id,
+        )
+        .first()
+    )
 
     if existing:
         return False
 
     return True
-
 
 # =========================================================
 # UPDATE SUPPLIER SCORE

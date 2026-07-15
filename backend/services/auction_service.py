@@ -128,17 +128,24 @@ def select_auction_winner(
 ):
     matches = (
         db.query(models.LeadMatch)
-        .filter_by(lead_id=lead_id)
+        .filter(
+            models.LeadMatch.lead_id == lead_id,
+            models.LeadMatch.status == "pending",
+        )
+        .with_for_update()
         .all()
     )
 
     candidates = []
 
     for item in matches:
-        if item.status != "pending":
+        bid_price = item.bid_price
+
+        # فقط Bid واقعی و مثبت وارد Auction شود.
+        if bid_price is None:
             continue
 
-        if item.bid_price is None:
+        if float(bid_price) <= 0:
             continue
 
         candidates.append(item)
@@ -147,7 +154,10 @@ def select_auction_winner(
         return None
 
     candidates.sort(
-        key=calculate_auction_rank,
+        key=lambda item: (
+            calculate_auction_rank(item),
+            item.created_at,
+        ),
         reverse=True,
     )
 
@@ -172,84 +182,133 @@ def finalize_auction(
             "error": "no_winner",
         }
 
-    matches = (
-        db.query(models.LeadMatch)
-        .filter_by(lead_id=lead_id)
-        .all()
-    )
-
-    for item in matches:
-        item.final_score = calculate_auction_rank(item)
-
-    winner.status = "won"
-    winner.won_at = datetime.utcnow()
-
-    losers = []
-
-    for item in matches:
-        if item.id == winner.id:
-            continue
-
-        item.status = "lost"
-        losers.append(item)
-
     lead = (
         db.query(models.Lead)
         .filter_by(id=lead_id)
+        .with_for_update()
         .first()
     )
+
+    if not lead:
+        return {
+            "success": False,
+            "error": "lead_not_found",
+        }
+
+    # جلوگیری از Finalize مجدد و کسر اعتبار تکراری
+    if (
+        lead.status == "claimed"
+        and lead.winner_supplier_id
+    ):
+        return {
+            "success": False,
+            "error": "already_finalized",
+        }
+
+    matches = (
+        db.query(models.LeadMatch)
+        .filter_by(lead_id=lead_id)
+        .with_for_update()
+        .all()
+    )
+
+    finalized_at = datetime.utcnow()
+
+    for item in matches:
+        item.final_score = calculate_auction_rank(
+            item
+        )
+
+        if item.id == winner.id:
+            item.status = "won"
+            item.won_at = finalized_at
+        else:
+            item.status = "lost"
 
     supplier = (
         db.query(models.Supplier)
         .filter_by(id=winner.supplier_id)
+        .with_for_update()
         .first()
     )
 
-    if supplier:
-        supplier.wins = (
-            (supplier.wins or 0)
-            + 1
-        )
+    if not supplier:
+        db.rollback()
 
-        lead_type = getattr(
-            lead,
-            "lead_type",
-            "service",
-        )
+        return {
+            "success": False,
+            "error": "supplier_not_found",
+        }
 
-        priority = getattr(
-            lead,
-            "priority_level",
-            "medium",
-        )
+    lead_type = getattr(
+        lead,
+        "lead_type",
+        "service",
+    )
 
-        cost = get_claim_cost(
-            lead_type,
-            priority,
-        )
+    priority = getattr(
+        lead,
+        "priority_level",
+        "medium",
+    )
 
-        deduct_credit(
-            db=db,
-            supplier_id=supplier.id,
-            amount=cost,
-            tx_type="auction_win",
-            reference_id=str(lead_id),
-        )
+    cost = get_claim_cost(
+        lead_type,
+        priority,
+    )
 
-    if lead:
-        lead.status = "claimed"
+    credit_ok = deduct_credit(
+        db=db,
+        supplier_id=supplier.id,
+        amount=cost,
+        tx_type="auction_win",
+        reference_id=str(winner.id),
+        description="auction win",
+    )
+
+    if not credit_ok:
+        db.rollback()
+
+        return {
+            "success": False,
+            "error": "insufficient_credit",
+        }
+
+    supplier.wins = (
+        supplier.wins or 0
+    ) + 1
+
+    lead.status = "claimed"
+    lead.winner_supplier_id = winner.supplier_id
+    lead.closed_at = finalized_at
+
+    # فقط اگر این ستون در مدل وجود دارد
+    if hasattr(lead, "winner_match_id"):
+        lead.winner_match_id = winner.id
 
     db.commit()
 
     return {
         "success": True,
-        "lead_id": str(lead_id),
-        "winner_supplier_id": str(winner.supplier_id),
-        "winner_bid": winner.bid_price,
-        "winner_score": winner.final_score,
+        "lead_id": str(lead.id),
+        "winner_supplier_id": str(
+            winner.supplier_id
+        ),
+        "winner_match_id": str(
+            winner.id
+        ),
+        "winner_bid": float(
+            winner.bid_price or 0
+        ),
+        "winner_score": float(
+            winner.final_score or 0
+        ),
+        "closed_at": (
+            lead.closed_at.isoformat()
+            if lead.closed_at
+            else None
+        ),
     }
-
-
 # =========================================================
 # EXPIRE
 # =========================================================
@@ -297,17 +356,19 @@ def auto_finalize_expired_auctions(
         db.query(models.LeadMatch)
         .filter(
             models.LeadMatch.status == "pending",
+            models.LeadMatch.expires_at.isnot(None),
             models.LeadMatch.expires_at < now,
         )
         .all()
     )
 
-    lead_ids = set()
-
-    for item in pending:
-        lead_ids.add(item.lead_id)
+    lead_ids = {
+        item.lead_id
+        for item in pending
+    }
 
     finalized = 0
+    expired = 0
 
     for lead_id in lead_ids:
         result = finalize_auction(
@@ -317,5 +378,27 @@ def auto_finalize_expired_auctions(
 
         if result.get("success"):
             finalized += 1
+            continue
 
-    return finalized
+        # No valid bid/winner: expire all remaining pending matches.
+        rows = (
+            db.query(models.LeadMatch)
+            .filter(
+                models.LeadMatch.lead_id == lead_id,
+                models.LeadMatch.status == "pending",
+                models.LeadMatch.expires_at.isnot(None),
+                models.LeadMatch.expires_at < now,
+            )
+            .all()
+        )
+
+        for row in rows:
+            row.status = "expired"
+            expired += 1
+
+        db.commit()
+
+    return {
+        "finalized": finalized,
+        "expired": expired,
+    }
